@@ -1,0 +1,9 @@
+# Copy to inventory.yml, set your box's IP (from router DHCP reservation).
+# First run on a fresh Ubuntu Server install:
+#   ansible-playbook -i inventory.yml playbook.yml
+signalshack:
+  hosts:
+    box1:
+      ansible_host: 192.168.1.50        # <- your appliance's reserved IP
+      ansible_user: admin               # <- user created during Ubuntu install
+      # signalshack_version: v0.1.0     # pin a tag for beta units

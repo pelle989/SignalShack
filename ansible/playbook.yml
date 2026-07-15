@@ -1,0 +1,125 @@
+# SignalShack appliance provisioning — one command from fresh Ubuntu Server
+# to serving http://signalshack.local/display.
+#
+#   ansible-playbook -i inventory.yml playbook.yml
+#   ansible-playbook -i inventory.yml playbook.yml --tags app   # redeploy only
+#
+# Single-file playbook by choice at this stage (roles split when beta fleet
+# grows). Idempotent — safe to rerun. The one manual step it cannot do:
+# BIOS "Restore on AC Power Loss = Power On" (the 60-second recovery promise).
+
+- name: Provision SignalShack appliance
+  hosts: signalshack
+  become: true
+  vars:
+    app_dir: /opt/signalshack
+    repo_url: "{{ signalshack_repo | default('https://github.com/pelle989/SignalShack.git') }}"
+    repo_version: "{{ signalshack_version | default('main') }}"
+
+  tasks:
+    # ---------------- base system
+    - name: System hostname is signalshack (drives signalshack.local)
+      tags: base
+      ansible.builtin.hostname:
+        name: signalshack
+
+    - name: Base packages
+      tags: base
+      ansible.builtin.apt:
+        name: [chrony, avahi-daemon, ufw, git, curl]
+        state: present
+        update_cache: true
+
+    - name: Unattended security upgrades (no auto-reboot)
+      tags: base
+      ansible.builtin.apt:
+        name: unattended-upgrades
+        state: present
+
+    - name: Time sync + mDNS enabled
+      tags: base
+      ansible.builtin.systemd:
+        name: "{{ item }}"
+        state: started
+        enabled: true
+      loop: [chrony, avahi-daemon]
+
+    # ---------------- docker
+    - name: Docker installed (official convenience script)
+      tags: docker
+      ansible.builtin.shell: |
+        set -e
+        command -v docker >/dev/null 2>&1 || curl -fsSL https://get.docker.com | sh
+      args: { creates: /usr/bin/docker }
+
+    - name: Docker log caps
+      tags: docker
+      ansible.builtin.copy:
+        dest: /etc/docker/daemon.json
+        content: '{"log-driver": "json-file", "log-opts": {"max-size": "10m", "max-file": "3"}}'
+        mode: "0644"
+      notify: restart docker
+
+    # ---------------- firewall & logs
+    - name: Firewall — deny in, allow display/mDNS (+SSH while beta)
+      tags: firewall
+      community.general.ufw:
+        rule: allow
+        port: "{{ item.port }}"
+        proto: "{{ item.proto }}"
+      loop:
+        - { port: "80", proto: tcp }
+        - { port: "5353", proto: udp }
+        - { port: "22", proto: tcp }    # remove for household beta units
+    - name: Firewall enabled, default deny incoming
+      tags: firewall
+      community.general.ufw:
+        state: enabled
+        policy: deny
+        direction: incoming
+
+    - name: Journald bounded to 200M
+      tags: base
+      ansible.builtin.copy:
+        dest: /etc/systemd/journald.conf.d/size.conf
+        content: "[Journal]\nSystemMaxUse=200M\n"
+        mode: "0644"
+      notify: restart journald
+
+    # ---------------- application
+    - name: App source present
+      tags: app
+      ansible.builtin.git:
+        repo: "{{ repo_url }}"
+        dest: "{{ app_dir }}"
+        version: "{{ repo_version }}"
+
+    - name: Data directory persists on host
+      tags: app
+      ansible.builtin.file:
+        path: "{{ app_dir }}/backend/data"
+        state: directory
+        mode: "0755"
+
+    - name: Stack built and running (restart policy survives reboots)
+      tags: app
+      ansible.builtin.shell: |
+        cd {{ app_dir }} && docker compose up -d --build
+      register: compose
+      changed_when: "'Started' in compose.stderr or 'Recreate' in compose.stderr"
+
+    - name: Display answers locally
+      tags: app
+      ansible.builtin.uri:
+        url: http://localhost/api/health
+        status_code: 200
+      retries: 12
+      delay: 5
+      register: health
+      until: health.status == 200
+
+  handlers:
+    - name: restart docker
+      ansible.builtin.systemd: { name: docker, state: restarted }
+    - name: restart journald
+      ansible.builtin.systemd: { name: systemd-journald, state: restarted }
