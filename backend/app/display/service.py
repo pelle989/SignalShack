@@ -50,11 +50,12 @@ def compose_board(conn: sqlite3.Connection, now: datetime | None = None) -> dict
     loc = conn.execute("SELECT * FROM location WHERE is_primary=1").fetchone()
     ctx = {"stamp_weather": "unavailable", "stamp_alerts": "unavailable",
            "primary_msg": None, "secondary_msgs": [], "weather_state": "unavailable",
-           "alerts_state": "unknown", "alerts": [], "announcements": [],
-           "location_label": loc["label"] if loc else "Home"}
+           "alerts_state": "unknown", "alerts": [], "alerts_attention": None,
+           "announcements": [], "location_label": loc["label"] if loc else "Home"}
 
     if loc is None:
         ctx["primary_msg"] = "Setup not complete — visit /admin/setup."
+        ctx["pip"] = {"state": "amber", "label": "setup needed"}
         return ctx
 
     # ---- weather meaning
@@ -73,8 +74,16 @@ def compose_board(conn: sqlite3.Connection, now: datetime | None = None) -> dict
     ctx["stamp_alerts"] = snapshots.stamp(nws_snap and nws_snap["fetched_at"], a_state)
     if nws_snap:
         norm = NWSAdapter().normalize(nws_snap["payload"])
-        ctx["alerts"] = norm["_alerts"]
         warning_active = norm["warning_active"]
+        # severity tier per alert: WARNING (red) > WATCH > ADVISORY (plan §7.3)
+        for a in norm["_alerts"]:
+            ev = a.get("event") or ""
+            a["tier"] = ("warning" if "Warning" in ev
+                         or a.get("severity") in ("Extreme", "Severe")
+                         else "watch" if "Watch" in ev else "advisory")
+        ctx["alerts"] = norm["_alerts"]
+        ctx["alerts_attention"] = "red" if warning_active else \
+            ("amber" if norm["_alerts"] else None)
 
     if om_snap:
         season_state = snapshots.kv_get(conn, "season_state", {})
@@ -111,4 +120,18 @@ def compose_board(conn: sqlite3.Connection, now: datetime | None = None) -> dict
         " ORDER BY priority DESC, created_at DESC LIMIT 5",
         (now.isoformat(timespec='seconds'),)).fetchall()
     ctx["announcements"] = [{"text": r["text"], "priority": r["priority"]} for r in rows]
+
+    ctx["pip"] = _pip(ctx)
     return ctx
+
+
+def _pip(ctx: dict) -> dict:
+    """Status pip per plan §7.5 — green: healthy; amber: stale/retrying;
+    red: no usable weather AND alert data."""
+    w, a = ctx["weather_state"], ctx["alerts_state"]
+    if w in ("unavailable", "degraded") and a == "unknown":
+        return {"state": "red", "label": "no data — check admin"}
+    if w in ("stale", "unavailable", "degraded") or a in ("stale", "unknown"):
+        worst = "retrying" if w in ("unavailable", "degraded") else "some data stale"
+        return {"state": "amber", "label": worst}
+    return {"state": "green", "label": "all signals fresh"}

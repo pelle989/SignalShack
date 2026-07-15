@@ -11,16 +11,29 @@
   *{margin:0;padding:0;box-sizing:border-box}
   html,body{height:100%}
   body{background:var(--bg);color:var(--text);
-       font-family:-apple-system,"Segoe UI",Roboto,sans-serif;
-       display:flex;flex-direction:column;padding:2.2vh 2.2vw;gap:1.8vh}
+       font-family:-apple-system,"Segoe UI",Roboto,"Helvetica Neue",sans-serif;
+       display:flex;flex-direction:column;padding:2.2vh 2.2vw;gap:1.8vh;
+       transition:filter 1s}
+  body.night{filter:brightness(.55)}
   header{display:flex;justify-content:space-between;align-items:baseline}
-  .clock{font-size:5.2vh;font-weight:600}
+  .clock{font-size:5.2vh;font-weight:600;letter-spacing:.01em}
   .clock small{font-size:2.4vh;font-weight:400;color:var(--dim);margin-left:1.2vw}
   .pip{display:flex;align-items:center;gap:.6vw;color:var(--dim);font-size:1.9vh}
-  .pip .dot{width:1.4vh;height:1.4vh;border-radius:50%;background:var(--green)}
+  .pip .dot{width:1.4vh;height:1.4vh;border-radius:50%}
+  .pip .dot.green{background:var(--green);box-shadow:0 0 .8vh rgba(63,185,107,.6)}
+  .pip .dot.amber{background:var(--amber);box-shadow:0 0 .8vh rgba(224,166,61,.6)}
+  .pip .dot.red{background:var(--red);box-shadow:0 0 .8vh rgba(224,93,93,.7)}
+
+  /* mobile: vertical stack (same components, no cap) */
   #board{flex:1;display:grid;gap:1.6vh;grid-template-columns:2fr 1fr;grid-template-rows:1fr 1fr}
+  @media (max-aspect-ratio: 1/1){
+    #board{display:flex;flex-direction:column;overflow-y:auto}
+    .primary{grid-row:auto}
+    .msg{font-size:3.4vh}
+  }
+
   .card{background:var(--card);border:1px solid var(--edge);border-radius:14px;
-        padding:2.4vh 1.6vw;display:flex;flex-direction:column}
+        padding:2.4vh 1.6vw;display:flex;flex-direction:column;overflow:hidden}
   .card h2{font-size:1.7vh;font-weight:600;text-transform:uppercase;
            letter-spacing:.12em;color:var(--faint);margin-bottom:1.4vh}
   .stamp{margin-top:auto;padding-top:1.2vh;font-size:1.5vh;color:var(--faint)}
@@ -31,21 +44,29 @@
   .empty{font-size:2.4vh;color:var(--dim)}
   .empty.ok::before{content:"✓ ";color:var(--green)}
   .empty.warn{color:var(--amber)}
-  .alert{font-size:2.3vh;line-height:1.4;margin-bottom:1.2vh}
-  .alert b{color:var(--amber)}
-  .attn{border-color:rgba(224,166,61,.55)}
-  .ann{font-size:2.3vh;margin-bottom:1vh;color:var(--dim)}
+  .alert{font-size:2.2vh;line-height:1.4;margin-bottom:1.4vh}
+  .tier{display:inline-block;font-size:1.6vh;font-weight:700;letter-spacing:.08em;
+        margin-right:.6vw}
+  .tier.warning{color:var(--red)} .tier.watch{color:var(--amber)}
+  .tier.advisory{color:var(--amber);opacity:.75}
+  .attn-amber{border-color:rgba(224,166,61,.55);box-shadow:inset 0 0 0 1px rgba(224,166,61,.25)}
+  .attn-red{border-color:rgba(224,93,93,.6);box-shadow:inset 0 0 0 1px rgba(224,93,93,.35)}
+  .ann{font-size:2.3vh;line-height:1.4;margin-bottom:1.1vh;color:var(--dim)}
   .ann.pri{color:var(--text)} .ann.pri::before{content:"● ";color:var(--amber)}
+  .ann::before{content:"○ ";color:var(--faint)}
+  .ann.pri::before{content:"● "}
+  .disclaimer{font-size:1.4vh;color:var(--faint)}
 </style>
 </head>
 <body>
   <header>
     <div class="clock"><span id="t">--:--</span><small id="d"></small></div>
-    <div class="pip"><span class="dot"></span><span>starting up</span></div>
+    <div class="pip" id="pip"><span class="dot amber"></span><span>starting up</span></div>
   </header>
 
-  <!-- board fragment: htmx polls; pauses when tab hidden (presence honesty) -->
-  <div id="board" hx-get="/fragments/board" hx-trigger="load, every 20s [document.visibilityState === 'visible']" hx-swap="innerHTML">
+  <div id="board" hx-get="/fragments/board"
+       hx-trigger="load, every 20s [document.visibilityState === 'visible']"
+       hx-swap="innerHTML">
     <div class="card primary"><h2>Weather</h2><div class="empty">Loading…</div></div>
   </div>
 
@@ -56,6 +77,9 @@
       n.toLocaleTimeString("en-US", {hour: "numeric", minute: "2-digit"});
     document.getElementById("d").textContent = " " +
       n.toLocaleDateString("en-US", {weekday: "long", month: "long", day: "numeric"});
+    // night mode: 10 PM – 5:30 AM (V1.1 makes this a setting)
+    const mins = n.getHours() * 60 + n.getMinutes();
+    document.body.classList.toggle("night", mins >= 22 * 60 || mins < 5 * 60 + 30);
   }
   tick(); setInterval(tick, 1000);
 </script>

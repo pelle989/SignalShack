@@ -5,7 +5,6 @@ derive_fields() output (or be another adapter's published field).
 """
 
 import json
-import math
 from datetime import date, timedelta
 from pathlib import Path
 

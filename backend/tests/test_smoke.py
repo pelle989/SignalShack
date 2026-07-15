@@ -62,12 +62,15 @@ def test_fragment_with_jobs_enabled_schedules_wake_refresh(tmp_path, monkeypatch
 def test_announcement_text_is_escaped(tmp_path, monkeypatch):
     """Invariant 4: rendered user input is always escaped (XSS)."""
     monkeypatch.setattr(db, "DB_PATH", tmp_path / "test.db")
+
     from app.main import templates
-    from fastapi import Request
     # render fragment with hostile announcement through the real template
     tpl = templates.get_template("_board.html")
-    html = tpl.render(primary_msg="x", secondary_msgs=[], alerts_empty=True,
-                      announcements=[{"text": "<script>alert(1)</script>"}],
-                      stamp="test")
+    html = tpl.render(primary_msg="x", secondary_msgs=[], alerts=[],
+                      alerts_state="fresh", alerts_attention=None,
+                      announcements=[{"text": "<script>alert(1)</script>", "priority": 1}],
+                      stamp_weather="test", stamp_alerts="test",
+                      location_label="Home",
+                      pip={"state": "green", "label": "test"})
     assert "<script>alert(1)</script>" not in html
     assert "&lt;script&gt;" in html

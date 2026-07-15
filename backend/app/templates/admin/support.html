@@ -1,0 +1,28 @@
+{% extends "admin/base.html" %}
+{% block content %}
+<h2>Self-diagnose</h2>
+<div class="card">
+  {% for c in checks %}
+  <div class="row">
+    <span>{{ c.name }}</span>
+    <span class="{% if c.ok %}ok{% else %}warn{% endif %}">{{ '✓' if c.ok else '—' }} {{ c.detail }}</span>
+  </div>
+  {% endfor %}
+</div>
+<h2>Diagnostic bundle</h2>
+<div class="card">
+  <p class="dim">Downloads a zip you can email to support. Contains: app version,
+  self-check results, source freshness, and event types. Does <b>not</b> contain
+  secrets, announcements, or personal data.</p>
+  <form method="post" action="/admin/diagnostics/bundle">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <button type="submit">Download diagnostic bundle</button>
+  </form>
+</div>
+<h2>Backup</h2>
+<div class="card">
+  <p class="dim">Your boards, locations, rules, and settings — no secrets, logs,
+  or announcements. Keep a copy somewhere safe.</p>
+  <a href="/admin/backup/export"><button type="button">Download backup</button></a>
+</div>
+{% endblock %}

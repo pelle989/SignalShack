@@ -1,3 +1,7 @@
+<div class="pip" id="pip" hx-swap-oob="true">
+  <span class="dot {{ pip.state }}"></span><span>{{ pip.label }}</span>
+</div>
+
 <div class="card primary">
   <h2>Weather · {{ location_label }}</h2>
   <div class="msg">{{ primary_msg }}</div>
@@ -5,19 +9,21 @@
   <div class="stamp">Open-Meteo / NWS · {{ stamp_weather }}</div>
 </div>
 
-<div class="card{% if alerts and alerts_state == 'fresh' %} attn{% endif %}">
+<div class="card{% if alerts_attention == 'red' %} attn-red{% elif alerts_attention == 'amber' %} attn-amber{% endif %}">
   <h2>Alerts</h2>
   {% if alerts_state == 'unknown' %}
     <div class="empty warn">Alert status unknown — waiting for weather service.</div>
-  {% elif alerts_state == 'stale' %}
-    {% for a in alerts %}<div class="alert">{{ a.event }} — {{ a.headline }}</div>{% endfor %}
-    <div class="empty warn">Alert status may be outdated.</div>
   {% elif alerts %}
-    {% for a in alerts %}
-      <div class="alert"><b>{{ a.severity | upper }}</b> · {{ a.event }}<br>{{ a.headline }}</div>
+    {% for a in alerts[:3] %}
+      <div class="alert"><span class="tier {{ a.tier }}">{{ a.tier | upper }}</span>{{ a.event }}<br>
+        <span style="color:var(--dim)">{{ a.headline }}</span></div>
     {% endfor %}
+    {% if alerts | length > 3 %}<div class="empty">+{{ alerts | length - 3 }} more</div>{% endif %}
+    {% if alerts_state == 'stale' %}<div class="empty warn">Alert status may be outdated.</div>{% endif %}
+    <div class="disclaimer">Not a substitute for official emergency alerts.</div>
   {% else %}
     <div class="empty ok">No active alerts.</div>
+    {% if alerts_state == 'stale' %}<div class="empty warn">Last check is outdated.</div>{% endif %}
   {% endif %}
   <div class="stamp">NWS · {{ stamp_alerts }}</div>
 </div>

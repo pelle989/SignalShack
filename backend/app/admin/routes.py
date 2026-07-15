@@ -11,7 +11,7 @@ from fastapi.templating import Jinja2Templates
 
 from app.adapters.nws import NWSAdapter
 from app.adapters.open_meteo import OpenMeteoAdapter
-from app.core import db, security, snapshots
+from app.core import backup, config_mgr, db, diagnostics, security, snapshots
 from app.jobs import scheduler
 
 router = APIRouter(prefix="/admin")
@@ -254,6 +254,104 @@ async def delete_announcement(request: Request, item_id: int, csrf: str = Form(N
             with conn:
                 conn.execute("DELETE FROM announcement WHERE id=?", (item_id,))
         return RedirectResponse("/admin/announcements", status_code=303)
+    finally:
+        conn.close()
+
+
+# ---------------------------------------------------------------- support & data
+
+@router.get("/support", response_class=HTMLResponse)
+async def support_page(request: Request):
+    conn = db.connect()
+    try:
+        guard = _guard(request, conn)
+        if isinstance(guard, RedirectResponse):
+            return guard
+        checks = diagnostics.self_check(conn)
+        return _render(request, "support.html", guard, checks=checks)
+    finally:
+        conn.close()
+
+
+@router.post("/diagnostics/bundle")
+async def diagnostics_bundle(request: Request, csrf: str = Form(None)):
+    from fastapi.responses import Response
+    conn = db.connect()
+    try:
+        guard = _guard(request, conn)
+        if isinstance(guard, RedirectResponse):
+            return guard
+        if not security.check_csrf(guard, csrf):
+            return RedirectResponse("/admin/support", status_code=303)
+        data = diagnostics.build_bundle(conn)
+        stamp = datetime.now().strftime("%Y%m%d-%H%M")
+        return Response(data, media_type="application/zip", headers={
+            "Content-Disposition":
+                f'attachment; filename="signalshack-diagnostics-{stamp}.zip"'})
+    finally:
+        conn.close()
+
+
+@router.get("/backup/export")
+async def backup_export(request: Request):
+    from fastapi.responses import Response
+    conn = db.connect()
+    try:
+        guard = _guard(request, conn)
+        if isinstance(guard, RedirectResponse):
+            return guard
+        bundle = backup.export_bundle(conn)
+        stamp = datetime.now().strftime("%Y%m%d")
+        return Response(json.dumps(bundle, indent=1), media_type="application/json",
+                        headers={"Content-Disposition":
+                                 f'attachment; filename="signalshack-backup-{stamp}.json"'})
+    finally:
+        conn.close()
+
+
+@router.get("/settings", response_class=HTMLResponse)
+async def settings_page(request: Request):
+    conn = db.connect()
+    try:
+        guard = _guard(request, conn)
+        if isinstance(guard, RedirectResponse):
+            return guard
+        return _render(request, "settings.html", guard,
+                       settings=config_mgr.get_settings(conn))
+    finally:
+        conn.close()
+
+
+@router.post("/settings", response_class=HTMLResponse)
+async def settings_submit(request: Request, timezone: str = Form(...),
+                          night_start: str = Form(...), night_end: str = Form(...),
+                          display_poll_seconds: int = Form(20),
+                          csrf: str = Form(None)):
+    conn = db.connect()
+    try:
+        guard = _guard(request, conn)
+        if isinstance(guard, RedirectResponse):
+            return guard
+        if not security.check_csrf(guard, csrf):
+            return RedirectResponse("/admin/settings", status_code=303)
+        ok, problems = config_mgr.apply_settings(conn, {
+            "timezone": timezone, "night_start": night_start,
+            "night_end": night_end, "display_poll_seconds": display_poll_seconds})
+        return _render(request, "settings.html", guard,
+                       settings=config_mgr.get_settings(conn),
+                       saved=ok, problems=problems)
+    finally:
+        conn.close()
+
+
+@router.get("/privacy", response_class=HTMLResponse)
+async def privacy_page(request: Request):
+    conn = db.connect()
+    try:
+        guard = _guard(request, conn)
+        if isinstance(guard, RedirectResponse):
+            return guard
+        return _render(request, "privacy.html", guard)
     finally:
         conn.close()
 

@@ -56,7 +56,7 @@ def derive_fields(hourly: dict, daily: dict, day_iso: str, now_h: int,
         return [_f(hourly[key][i]) for i in idx]
 
     temp, pop = series("temperature_2m"), series("precipitation_probability")
-    precip, snow = series("precipitation"), series("snowfall")
+    precip = series("precipitation")
     code = [int(hourly["weather_code"][i]) for i in idx]
     cloud, dew = series("cloud_cover"), series("dew_point_2m")
     wind, gust = series("wind_speed_10m"), series("wind_gusts_10m")
@@ -165,7 +165,7 @@ def derive_fields(hourly: dict, daily: dict, day_iso: str, now_h: int,
         "pop_evening_max": max(((pop[i] or 0) for i in ev), default=None),
         # --- streaks & one-shots
         "freeze_snap_onset": len(prior_lows) >= 3
-                             and all(l > 32 for l in prior_lows if l is not None),
+                             and all(low > 32 for low in prior_lows if low is not None),
         "hot_streak_days": hot_streak,
         "consecutive_precip_days": rain_streak,
         "first_freeze_of_season": first_freeze,

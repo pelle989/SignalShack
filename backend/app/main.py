@@ -68,12 +68,17 @@ app = FastAPI(title="SignalShack", docs_url=None, redoc_url=None, lifespan=lifes
 
 @app.middleware("http")
 async def host_guard(request: Request, call_next):
-    """DNS-rebinding defense (invariant 4): admin only answers to known hosts."""
+    """DNS-rebinding defense (invariant 4) + baseline security headers."""
     if request.url.path.startswith("/admin") and not security.host_allowed(
             request, os.environ.get("SIGNALSHACK_HOST")):
         from fastapi.responses import PlainTextResponse
         return PlainTextResponse("Forbidden host", status_code=403)
-    return await call_next(request)
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["Referrer-Policy"] = "same-origin"
+    if request.url.path.startswith("/admin"):
+        response.headers["X-Frame-Options"] = "DENY"   # admin never framed
+    return response
 
 
 app.include_router(admin_router)

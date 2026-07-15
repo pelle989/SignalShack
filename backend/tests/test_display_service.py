@@ -1,7 +1,6 @@
 """Display composition from stored snapshots — honest states end to end."""
 
-import json
-from datetime import date, datetime, timedelta
+from datetime import date, datetime
 
 from app.core import db, snapshots
 from app.display.service import compose_board

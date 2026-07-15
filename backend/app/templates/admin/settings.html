@@ -1,0 +1,22 @@
+{% extends "admin/base.html" %}
+{% block content %}
+<h2>Settings</h2>
+<div class="card">
+  {% if saved %}<div class="ok">Saved and health-checked.</div>{% endif %}
+  {% for p in problems or [] %}<div class="error">{{ p }}</div>{% endfor %}
+  <form method="post" action="/admin/settings">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <label>Timezone</label>
+    <input type="text" name="timezone" value="{{ settings.timezone }}">
+    <label>Night mode starts (HH:MM)</label>
+    <input type="text" name="night_start" value="{{ settings.night_start }}">
+    <label>Night mode ends (HH:MM)</label>
+    <input type="text" name="night_end" value="{{ settings.night_end }}">
+    <label>Display refresh (seconds, 10–120)</label>
+    <input type="number" name="display_poll_seconds" value="{{ settings.display_poll_seconds }}" min="10" max="120">
+    <button type="submit">Save</button>
+  </form>
+  <p class="dim">Every save is validated, health-checked, and rolls back
+  automatically if it would break the display.</p>
+</div>
+{% endblock %}

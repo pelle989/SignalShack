@@ -15,7 +15,7 @@ Invariants enforced here:
   - one rule per topic per composition (highest priority wins)
 """
 
-from dataclasses import dataclass, field as dfield
+from dataclasses import dataclass
 
 
 @dataclass(frozen=True)
@@ -34,14 +34,22 @@ def _check(cond: dict, fields: dict) -> bool | None:
         return None
     actual = fields[name]
     match op:
-        case ">=": return actual >= value
-        case "<=": return actual <= value
-        case ">":  return actual > value
-        case "<":  return actual < value
-        case "==": return actual == value
-        case "!=": return actual != value
-        case "between": return value[0] <= actual <= value[1]
-        case "in": return actual in value
+        case ">=":
+            return actual >= value
+        case "<=":
+            return actual <= value
+        case ">":
+            return actual > value
+        case "<":
+            return actual < value
+        case "==":
+            return actual == value
+        case "!=":
+            return actual != value
+        case "between":
+            return value[0] <= actual <= value[1]
+        case "in":
+            return actual in value
     raise ValueError(f"unknown operator: {op}")
 
 

@@ -8,7 +8,7 @@ refresh_if_stale() on request after idle.
 """
 
 import asyncio
-from datetime import datetime, timedelta
+from datetime import datetime
 
 from app.adapters.nws import NWSAdapter
 from app.adapters.open_meteo import OpenMeteoAdapter

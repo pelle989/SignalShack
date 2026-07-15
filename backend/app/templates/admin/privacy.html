@@ -1,0 +1,16 @@
+{% extends "admin/base.html" %}
+{% block content %}
+<h2>Privacy — what leaves this box</h2>
+<div class="card">
+  <p><b>Stays on this device, always:</b> your password (hashed), announcements,
+  boards and rules, usage counts, logs, and any API keys you add (encrypted).</p>
+  <p style="margin-top:10px"><b>Leaves your network, only to fetch your data:</b></p>
+  <div class="row"><span>Open-Meteo &amp; National Weather Service</span>
+    <span class="dim">your approximate coordinates — required to get forecasts and alerts</span></div>
+  <div class="row"><span>Open-Meteo geocoding (setup only)</span>
+    <span class="dim">the ZIP code you type, once, to find coordinates</span></div>
+  <p style="margin-top:10px"><b>Never:</b> no accounts, no telemetry, no analytics,
+  no ads, no cloud copy of anything. If SignalShack-the-company disappeared
+  tomorrow, this box would keep working exactly as it does today.</p>
+</div>
+{% endblock %}

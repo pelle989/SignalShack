@@ -29,5 +29,8 @@ target-version = "py312"
 select = ["E", "F", "I", "UP", "B", "S"]  # incl. flake8-bandit security checks
 ignore = ["S101"]  # asserts fine in tests
 
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["S105", "S106", "S107"]  # deliberate fake secrets/passwords in tests
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
