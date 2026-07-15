@@ -1,0 +1,6 @@
+# SignalShack appliance inventory — Joe's Gate 1 box
+signalshack:
+  hosts:
+    box1:
+      ansible_host: 10.0.1.11
+      ansible_user: joe

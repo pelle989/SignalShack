@@ -78,6 +78,13 @@
         policy: deny
         direction: incoming
 
+    - name: Journald drop-in directory exists
+      tags: base
+      ansible.builtin.file:
+        path: /etc/systemd/journald.conf.d
+        state: directory
+        mode: "0755"
+
     - name: Journald bounded to 200M
       tags: base
       ansible.builtin.copy:
