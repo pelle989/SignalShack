@@ -10,10 +10,12 @@ import sqlite3
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
+from app.adapters.airnow import AirNowAdapter
+from app.adapters.mta import MTAAdapter, line_view
 from app.adapters.nws import NWSAdapter
 from app.adapters.open_meteo import OpenMeteoAdapter
 from app.adapters.weather_derive import derive_fields
-from app.core import snapshots
+from app.core import secrets, snapshots
 from app.rules.engine import compose, evaluate
 
 SEEDS = json.loads(
@@ -51,7 +53,8 @@ def compose_board(conn: sqlite3.Connection, now: datetime | None = None) -> dict
     ctx = {"stamp_weather": "unavailable", "stamp_alerts": "unavailable",
            "primary_msg": None, "secondary_msgs": [], "weather_state": "unavailable",
            "alerts_state": "unknown", "alerts": [], "alerts_attention": None,
-           "announcements": [], "location_label": loc["label"] if loc else "Home"}
+           "announcements": [], "transit": [], "stamp_transit": None,
+           "air": None, "location_label": loc["label"] if loc else "Home"}
 
     if loc is None:
         ctx["primary_msg"] = "Setup not complete — visit /admin/setup."
@@ -113,6 +116,42 @@ def compose_board(conn: sqlite3.Connection, now: datetime | None = None) -> dict
             ctx["primary_msg"] = "Weather data incomplete — retrying."
     else:
         ctx["primary_msg"] = "Weather unavailable — waiting for first fetch."
+
+    # ---- transit line cards (C1): one card instance per monitored line
+    monitors = conn.execute(
+        "SELECT field FROM monitor WHERE adapter='mta' ORDER BY id").fetchall()
+    ctx["transit"] = []
+    ctx["stamp_transit"] = None
+    if monitors:
+        mta_snap = snapshots.latest(conn, loc["id"], "mta")
+        t_state = snapshots.freshness(mta_snap and mta_snap["fetched_at"],
+                                      MTAAdapter.manifest.poll_seconds_fresh,
+                                      MTAAdapter.manifest.stale_after_seconds, now)
+        ctx["stamp_transit"] = snapshots.stamp(mta_snap and mta_snap["fetched_at"],
+                                               t_state)
+        normalized = MTAAdapter().normalize(mta_snap["payload"]) if mta_snap else {}
+        for m in monitors:
+            view = line_view(m["field"], normalized)
+            view["state"] = t_state
+            if t_state == "unavailable":     # honest state: never claim good service
+                view["label"] = "Status unknown"
+                view["attention"] = None
+            ctx["transit"].append(view)
+
+    # ---- air quality card (V1.1): appears once an AirNow key is stored
+    ctx["air"] = None
+    if secrets.exists(conn, "airnow"):
+        aq_snap = snapshots.latest(conn, loc["id"], "airnow")
+        a_state = snapshots.freshness(aq_snap and aq_snap["fetched_at"],
+                                      AirNowAdapter.manifest.poll_seconds_fresh,
+                                      AirNowAdapter.manifest.stale_after_seconds, now)
+        air = {"state": a_state,
+               "stamp": snapshots.stamp(aq_snap and aq_snap["fetched_at"], a_state)}
+        if aq_snap:
+            air.update(AirNowAdapter().normalize(aq_snap["payload"]))
+        else:
+            air.update({"aqi": None, "meaning": None})
+        ctx["air"] = air
 
     # ---- announcements
     rows = conn.execute(

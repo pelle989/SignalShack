@@ -1,0 +1,24 @@
+{% extends "admin/base.html" %}
+{% block content %}
+<div class="card">
+  <h2>Step 2 of 3 — Where's home?</h2>
+  <p class="dim" style="margin-bottom:6px">Your ZIP powers weather, alerts,
+  and every location feature — you'll never be asked again.</p>
+  {% if error %}<div class="error">{{ error }}</div>{% endif %}
+  <form method="post" action="/admin/setup/location">
+    <label>ZIP code</label>
+    <input type="text" name="zipcode" placeholder="11758" inputmode="numeric"
+           pattern="[0-9]{5}" {% if not zip_failed %}autofocus{% endif %}>
+    {% if zip_failed %}
+      <p class="dim" style="margin-top:12px">Or enter coordinates directly
+      (from any maps app — tap and hold your house):</p>
+      <label>Latitude</label><input type="text" name="latitude">
+      <label>Longitude</label><input type="text" name="longitude">
+      <label>Location label</label><input type="text" name="label" value="Home">
+      <label>Timezone</label>
+      <input type="text" name="timezone" value="America/New_York">
+    {% endif %}
+    <button type="submit">Continue</button>
+  </form>
+</div>
+{% endblock %}

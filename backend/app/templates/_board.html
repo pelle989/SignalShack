@@ -28,6 +28,33 @@
   <div class="stamp">NWS · {{ stamp_alerts }}</div>
 </div>
 
+{% for t in transit %}
+<div class="card{% if t.attention == 'red' %} attn-red{% elif t.attention == 'amber' %} attn-amber{% endif %}">
+  <h2><span class="bullet" style="background:{{ t.color }};{% if t.dark_text %}color:#111{% endif %}">{{ t.line if t.line not in ('LIRR','MNR') else '' }}</span>
+      {{ 'LIRR' if t.line == 'LIRR' else 'Metro-North' if t.line == 'MNR' else t.line ~ ' Train' }}</h2>
+  <div class="line-status {{ 'ok' if t.status == 'good' else 'late' if t.attention == 'amber' else 'bad' if t.attention == 'red' else 'dim' }}">{{ t.label }}</div>
+  {% if t.headline %}<div class="line-head">{{ t.headline }}</div>{% endif %}
+  {% if t.state == 'stale' %}<div class="empty warn">Status may be outdated.</div>{% endif %}
+  <div class="stamp">MTA · {{ stamp_transit }}</div>
+</div>
+{% endfor %}
+
+{% if air %}
+<div class="card{% if air.aqi and air.aqi > 100 %} attn-amber{% endif %}">
+  <h2>Air quality</h2>
+  {% if air.state == 'unavailable' and air.aqi is none %}
+    <div class="empty">Waiting for first reading…</div>
+  {% elif air.aqi is none %}
+    <div class="empty warn">No nearby readings right now.</div>
+  {% else %}
+    <div class="line-status {{ 'ok' if air.aqi <= 50 else 'dim' if air.aqi <= 100 else 'late' }}">AQI {{ air.aqi }} · {{ air.aqi_category_name }}</div>
+    <div class="line-head">{{ air.meaning }}</div>
+  {% endif %}
+  {% if air.state == 'stale' %}<div class="empty warn">Reading may be outdated.</div>{% endif %}
+  <div class="stamp">AirNow (US EPA) · {{ air.stamp }}</div>
+</div>
+{% endif %}
+
 <div class="card">
   <h2>Household</h2>
   {% if announcements %}

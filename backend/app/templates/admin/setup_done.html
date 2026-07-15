@@ -1,0 +1,27 @@
+{% extends "admin/base.html" %}
+{% block content %}
+<div class="card">
+  <h2>Step 3 of 3 — You're live</h2>
+  <p class="dim">The box is already fetching your weather. Open the display on
+  any TV or browser on your WiFi:</p>
+  <p style="font-size:17px;margin:10px 0"><b>{{ mdns_url }}</b></p>
+  <p class="dim">If that address doesn't work on your TV, use:
+  <b>{{ display_url }}</b> — write it down.</p>
+  <div style="background:#fff;display:inline-block;padding:10px;border-radius:8px;margin:10px 0">
+    {{ qr_svg | safe }}
+  </div>
+  <p class="dim">Scan with a phone or tablet to open the display there.</p>
+</div>
+<div class="card">
+  <h2>Try it — post your first announcement</h2>
+  <p class="dim">It appears on the display within about 30 seconds.</p>
+  <form method="post" action="/admin/announcements">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <input type="hidden" name="hours" value="12">
+    <label>Message</label>
+    <input type="text" name="text" maxlength="200" placeholder="SignalShack is alive">
+    <button type="submit">Post it</button>
+  </form>
+  <p style="margin-top:12px"><a href="/admin" class="dim">Skip to admin →</a></p>
+</div>
+{% endblock %}

@@ -17,8 +17,10 @@ def client(tmp_path, monkeypatch):
 
 
 def do_setup(c, password="hunter2hunter2"):
-    return c.post("/admin/setup", data={
-        "password": password, "password2": password,
+    """Walk the multi-step wizard (manual-coordinates path, no network)."""
+    c.post("/admin/setup", data={"password": password, "password2": password},
+           follow_redirects=False)
+    return c.post("/admin/setup/location", data={
         "latitude": "40.68", "longitude": "-73.47",
         "label": "Home", "timezone": "America/New_York"}, follow_redirects=False)
 
@@ -34,7 +36,7 @@ def test_setup_creates_device_location_board_and_logs_in(tmp_path, monkeypatch):
     with client(tmp_path, monkeypatch) as c:
         assert c.get("/admin", follow_redirects=False).headers["location"] == "/admin/setup"
         r = do_setup(c)
-        assert r.status_code == 303 and r.headers["location"] == "/admin"
+        assert r.status_code == 303 and r.headers["location"] == "/admin/setup/done"
         assert c.get("/admin").status_code == 200      # session cookie set
     conn = db.connect()
     assert conn.execute("SELECT 1 FROM device WHERE id=1").fetchone()
@@ -45,11 +47,10 @@ def test_setup_creates_device_location_board_and_logs_in(tmp_path, monkeypatch):
 
 def test_setup_rejects_weak_or_mismatched_password(tmp_path, monkeypatch):
     with client(tmp_path, monkeypatch) as c:
-        r = c.post("/admin/setup", data={"password": "short", "password2": "short",
-                                         "latitude": "1", "longitude": "1"})
+        r = c.post("/admin/setup", data={"password": "short", "password2": "short"})
         assert "at least 8" in r.text
-        r = c.post("/admin/setup", data={"password": "longenough1", "password2": "different1",
-                                         "latitude": "1", "longitude": "1"})
+        r = c.post("/admin/setup", data={"password": "longenough1",
+                                         "password2": "different1"})
         assert "match" in r.text
 
 

@@ -19,4 +19,20 @@
   <p class="dim">Every save is validated, health-checked, and rolls back
   automatically if it would break the display.</p>
 </div>
+<h2>Air quality (AirNow)</h2>
+<div class="card">
+  {% if airnow_configured %}
+  <p class="ok">Key configured — the Air Quality card is on your board.</p>
+  <p class="dim">Paste a new key to replace it, or submit blank to remove.</p>
+  {% else %}
+  <p class="dim">Free key, email signup only (no credit card):
+  get one at docs.airnowapi.org, then paste it here — sloppy pastes are fine.</p>
+  {% endif %}
+  <form method="post" action="/admin/settings/airnow">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <label>AirNow API key</label>
+    <input type="text" name="api_key" autocomplete="off">
+    <button type="submit">Save key</button>
+  </form>
+</div>
 {% endblock %}

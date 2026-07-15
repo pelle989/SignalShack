@@ -42,7 +42,10 @@ def test_security_headers_present(tmp_path, monkeypatch):
 
 def test_session_cookie_flags(tmp_path, monkeypatch):
     with client(tmp_path, monkeypatch) as c:
-        r = do_setup(c)
+        # cookie is issued at the wizard's password step
+        r = c.post("/admin/setup", data={"password": "hunter2hunter2",
+                                         "password2": "hunter2hunter2"},
+                   follow_redirects=False)
         cookie_header = r.headers.get("set-cookie", "")
         assert "HttpOnly" in cookie_header
         assert "SameSite=lax" in cookie_header

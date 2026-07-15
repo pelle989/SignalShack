@@ -1,0 +1,19 @@
+{% extends "admin/base.html" %}
+{% block content %}
+<div class="card">
+  <h2>Step 2 of 3 — Is this right?</h2>
+  <p style="font-size:17px;margin:10px 0"><b>{{ found.label }}</b></p>
+  <p class="dim">Weather and alerts will come from the National Weather Service
+  for this area. Timezone: {{ found.tz }}.</p>
+  <form method="post" action="/admin/setup/confirm" style="margin-top:8px">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <input type="hidden" name="zipcode" value="{{ zipcode }}">
+    <input type="hidden" name="latitude" value="{{ found.lat }}">
+    <input type="hidden" name="longitude" value="{{ found.lon }}">
+    <input type="hidden" name="label" value="Home">
+    <input type="hidden" name="timezone" value="{{ found.tz }}">
+    <button type="submit">Yes, that's my area</button>
+  </form>
+  <p style="margin-top:12px"><a href="/admin/setup/location" class="dim">Not right? Try again</a></p>
+</div>
+{% endblock %}

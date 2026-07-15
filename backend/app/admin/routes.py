@@ -11,7 +11,7 @@ from fastapi.templating import Jinja2Templates
 
 from app.adapters.nws import NWSAdapter
 from app.adapters.open_meteo import OpenMeteoAdapter
-from app.core import backup, config_mgr, db, diagnostics, security, snapshots
+from app.core import backup, config_mgr, db, diagnostics, secrets, security, snapshots
 from app.jobs import scheduler
 
 router = APIRouter(prefix="/admin")
@@ -54,58 +54,158 @@ async def _geocode_zip(zipcode: str) -> dict | None:
         return None
 
 
-# ---------------------------------------------------------------- setup
+# ---------------------------------------------------------------- setup wizard
+# Multi-step per spec (plan §6): password → ZIP w/ resolved-location confirm →
+# done screen (URLs + QR + first-announcement teaser). Resumable at every step.
+
+def _setup_stage(conn) -> str:
+    """'password' | 'location' | 'complete'"""
+    if _device(conn) is None:
+        return "password"
+    if not conn.execute("SELECT 1 FROM location WHERE is_primary=1").fetchone():
+        return "location"
+    return "complete"
+
+
+def _wizard_redirect(stage: str) -> RedirectResponse:
+    target = {"password": "/admin/setup", "location": "/admin/setup/location",
+              "complete": "/admin"}[stage]
+    return RedirectResponse(target, status_code=303)
+
 
 @router.get("/setup", response_class=HTMLResponse)
 async def setup_form(request: Request):
     conn = db.connect()
     try:
-        if _device(conn):
-            return RedirectResponse("/admin", status_code=303)
+        stage = _setup_stage(conn)
     finally:
         conn.close()
+    if stage != "password":
+        return _wizard_redirect(stage)
     return _render(request, "setup.html")
 
 
 @router.post("/setup", response_class=HTMLResponse)
-async def setup_submit(request: Request, password: str = Form(...),
-                       password2: str = Form(...), zipcode: str = Form(""),
-                       latitude: str = Form(""), longitude: str = Form(""),
-                       label: str = Form("Home"),
-                       timezone: str = Form("America/New_York")):
+async def setup_password(request: Request, password: str = Form(...),
+                         password2: str = Form(...)):
     conn = db.connect()
     try:
-        if _device(conn):
-            return RedirectResponse("/admin", status_code=303)
+        if _setup_stage(conn) != "password":
+            return _wizard_redirect(_setup_stage(conn))
         if password != password2 or len(password) < 8:
             return _render(request, "setup.html",
                            error="Passwords must match and be at least 8 characters.")
-        if latitude and longitude:
-            loc = {"lat": float(latitude), "lon": float(longitude),
-                   "label": label, "tz": timezone}
-        else:
-            loc = await _geocode_zip(zipcode)
-            if loc is None:
-                return _render(request, "setup.html", zip_failed=True,
-                               error="ZIP lookup failed — enter coordinates below.")
         now = datetime.now().isoformat(timespec="seconds")
         with conn:
             conn.execute(
-                "INSERT INTO device (id, first_boot_at, setup_completed_at, timezone,"
-                " admin_password_hash) VALUES (1, ?, ?, ?, ?)",
-                (now, now, loc["tz"], security.hash_password(password)))
-            conn.execute(
-                "INSERT INTO location (label, zip, latitude, longitude, is_primary)"
-                " VALUES (?, ?, ?, ?, 1)",
-                (loc["label"], zipcode or None, loc["lat"], loc["lon"]))
-            conn.execute(
-                "INSERT INTO board (name, is_default, layout_json) VALUES"
-                " ('Default', 1, '{\"preset\": \"default\"}')")
-        cookie, _ = security.make_session()
-        resp = RedirectResponse("/admin", status_code=303)
-        resp.set_cookie(security.SESSION_COOKIE, cookie, httponly=True,
-                        samesite="lax", max_age=security.SESSION_MAX_AGE)
-        return resp
+                "INSERT INTO device (id, first_boot_at, timezone, admin_password_hash)"
+                " VALUES (1, ?, 'America/New_York', ?)",
+                (now, security.hash_password(password)))
+    finally:
+        conn.close()
+    cookie, _ = security.make_session()
+    resp = RedirectResponse("/admin/setup/location", status_code=303)
+    resp.set_cookie(security.SESSION_COOKIE, cookie, httponly=True,
+                    samesite="lax", max_age=security.SESSION_MAX_AGE)
+    return resp
+
+
+@router.get("/setup/location", response_class=HTMLResponse)
+async def setup_location_form(request: Request):
+    conn = db.connect()
+    try:
+        stage = _setup_stage(conn)
+        if stage != "location":
+            return _wizard_redirect(stage)
+        session = security.read_session(request)
+        if not session:
+            return RedirectResponse("/admin/login", status_code=303)
+        return _render(request, "setup_location.html", session)
+    finally:
+        conn.close()
+
+
+@router.post("/setup/location", response_class=HTMLResponse)
+async def setup_location_submit(request: Request, zipcode: str = Form(""),
+                                latitude: str = Form(""), longitude: str = Form(""),
+                                label: str = Form("Home"),
+                                timezone: str = Form("America/New_York")):
+    conn = db.connect()
+    try:
+        stage = _setup_stage(conn)
+        if stage != "location":
+            return _wizard_redirect(stage)
+        session = security.read_session(request)
+        if not session:
+            return RedirectResponse("/admin/login", status_code=303)
+        if latitude and longitude:   # manual path: user typed it, no confirm needed
+            _create_location(conn, label, zipcode, float(latitude),
+                             float(longitude), timezone)
+            return RedirectResponse("/admin/setup/done", status_code=303)
+        found = await _geocode_zip(zipcode)
+        if found is None:
+            return _render(request, "setup_location.html", session, zip_failed=True,
+                           error="ZIP lookup failed — check it, or enter"
+                                 " coordinates below.")
+        # confirm screen: show the resolved MEANING, not coordinates (spec)
+        return _render(request, "setup_confirm.html", session,
+                       zipcode=zipcode, found=found)
+    finally:
+        conn.close()
+
+
+@router.post("/setup/confirm", response_class=HTMLResponse)
+async def setup_confirm(request: Request, zipcode: str = Form(""),
+                        latitude: float = Form(...), longitude: float = Form(...),
+                        label: str = Form("Home"),
+                        timezone: str = Form("America/New_York"),
+                        csrf: str = Form(None)):
+    conn = db.connect()
+    try:
+        stage = _setup_stage(conn)
+        if stage != "location":
+            return _wizard_redirect(stage)
+        session = security.read_session(request)
+        if not session or not security.check_csrf(session, csrf):
+            return RedirectResponse("/admin/setup/location", status_code=303)
+        _create_location(conn, label, zipcode, latitude, longitude, timezone)
+        return RedirectResponse("/admin/setup/done", status_code=303)
+    finally:
+        conn.close()
+
+
+def _create_location(conn, label, zipcode, lat, lon, tz) -> None:
+    now = datetime.now().isoformat(timespec="seconds")
+    with conn:
+        conn.execute("INSERT INTO location (label, zip, latitude, longitude,"
+                     " is_primary) VALUES (?, ?, ?, ?, 1)",
+                     (label or "Home", zipcode or None, lat, lon))
+        conn.execute("UPDATE device SET timezone=?, setup_completed_at=? WHERE id=1",
+                     (tz, now))
+        conn.execute("INSERT INTO board (name, is_default, layout_json)"
+                     " VALUES ('Default', 1, '{\"preset\": \"default\"}')")
+
+
+@router.get("/setup/done", response_class=HTMLResponse)
+async def setup_done(request: Request):
+    import qrcode
+    import qrcode.image.svg
+    conn = db.connect()
+    try:
+        if _setup_stage(conn) != "complete":
+            return _wizard_redirect(_setup_stage(conn))
+        session = security.read_session(request)
+        if not session:
+            return RedirectResponse("/admin/login", status_code=303)
+        host = request.url.hostname or "signalshack.local"
+        display_url = f"http://{host}/display"
+        img = qrcode.make(display_url,
+                          image_factory=qrcode.image.svg.SvgPathImage,
+                          box_size=12)
+        return _render(request, "setup_done.html", session,
+                       display_url=display_url,
+                       mdns_url="http://signalshack.local/display",
+                       qr_svg=img.to_string(encoding="unicode"))
     finally:
         conn.close()
 
@@ -317,7 +417,27 @@ async def settings_page(request: Request):
         if isinstance(guard, RedirectResponse):
             return guard
         return _render(request, "settings.html", guard,
-                       settings=config_mgr.get_settings(conn))
+                       settings=config_mgr.get_settings(conn),
+                       airnow_configured=secrets.exists(conn, "airnow"))
+    finally:
+        conn.close()
+
+
+@router.post("/settings/airnow")
+async def airnow_key(request: Request, api_key: str = Form(""),
+                     csrf: str = Form(None)):
+    conn = db.connect()
+    try:
+        guard = _guard(request, conn)
+        if isinstance(guard, RedirectResponse):
+            return guard
+        if security.check_csrf(guard, csrf):
+            key = secrets.clean_pasted_key(api_key)
+            if key:
+                secrets.store(conn, "airnow", key, label="AirNow API key")
+            else:
+                secrets.delete(conn, "airnow")   # blank submit = remove
+        return RedirectResponse("/admin/settings", status_code=303)
     finally:
         conn.close()
 
@@ -352,6 +472,65 @@ async def privacy_page(request: Request):
         if isinstance(guard, RedirectResponse):
             return guard
         return _render(request, "privacy.html", guard)
+    finally:
+        conn.close()
+
+
+# ---------------------------------------------------------------- transit (C1)
+
+SUBWAY_LINES = ["1", "2", "3", "4", "5", "6", "7", "A", "C", "E", "B", "D", "F",
+                "M", "G", "J", "Z", "L", "N", "Q", "R", "W", "S", "SI"]
+RAIL_LINES = ["LIRR", "MNR"]
+
+
+@router.get("/transit", response_class=HTMLResponse)
+async def transit_page(request: Request):
+    conn = db.connect()
+    try:
+        guard = _guard(request, conn)
+        if isinstance(guard, RedirectResponse):
+            return guard
+        monitors = conn.execute(
+            "SELECT id, field FROM monitor WHERE adapter='mta' ORDER BY id").fetchall()
+        return _render(request, "transit.html", guard, monitors=monitors,
+                       subway=SUBWAY_LINES, rail=RAIL_LINES)
+    finally:
+        conn.close()
+
+
+@router.post("/transit")
+async def transit_add(request: Request, line: str = Form(...),
+                      csrf: str = Form(None)):
+    conn = db.connect()
+    try:
+        guard = _guard(request, conn)
+        if isinstance(guard, RedirectResponse):
+            return guard
+        if security.check_csrf(guard, csrf) and line in SUBWAY_LINES + RAIL_LINES:
+            exists = conn.execute("SELECT 1 FROM monitor WHERE adapter='mta'"
+                                  " AND field=?", (line,)).fetchone()
+            if not exists:
+                with conn:
+                    conn.execute("INSERT INTO monitor (adapter, field, created_at)"
+                                 " VALUES ('mta', ?, ?)",
+                                 (line, datetime.now().isoformat(timespec="seconds")))
+        return RedirectResponse("/admin/transit", status_code=303)
+    finally:
+        conn.close()
+
+
+@router.post("/transit/{monitor_id}/delete")
+async def transit_delete(request: Request, monitor_id: int, csrf: str = Form(None)):
+    conn = db.connect()
+    try:
+        guard = _guard(request, conn)
+        if isinstance(guard, RedirectResponse):
+            return guard
+        if security.check_csrf(guard, csrf):
+            with conn:
+                conn.execute("DELETE FROM monitor WHERE id=? AND adapter='mta'",
+                             (monitor_id,))
+        return RedirectResponse("/admin/transit", status_code=303)
     finally:
         conn.close()
 

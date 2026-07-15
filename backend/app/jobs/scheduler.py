@@ -10,9 +10,11 @@ refresh_if_stale() on request after idle.
 import asyncio
 from datetime import datetime
 
+from app.adapters.airnow import AirNowAdapter
+from app.adapters.mta import MTAAdapter
 from app.adapters.nws import NWSAdapter
 from app.adapters.open_meteo import OpenMeteoAdapter
-from app.core import db, snapshots
+from app.core import db, secrets, snapshots
 
 VIEWER_WINDOW_S = 15 * 60
 IDLE_ALERT_POLL_S = 300           # alerts when nobody watching: 5 min, never off
@@ -61,7 +63,7 @@ async def refresh_if_stale(loc_id: int) -> None:
         loc = conn.execute("SELECT * FROM location WHERE id=?", (loc_id,)).fetchone()
         if not loc:
             return
-        for adapter in (OpenMeteoAdapter(), NWSAdapter()):
+        for adapter in _active_adapters(conn):
             snap = snapshots.latest(conn, loc_id, adapter.manifest.name)
             state = snapshots.freshness(snap and snap["fetched_at"],
                                         adapter.manifest.poll_seconds_fresh,
@@ -72,14 +74,25 @@ async def refresh_if_stale(loc_id: int) -> None:
         conn.close()
 
 
+def _active_adapters(conn) -> tuple:
+    """Keyed/optional adapters poll only when the household enabled them."""
+    adapters = [OpenMeteoAdapter(), NWSAdapter()]
+    if conn.execute("SELECT 1 FROM monitor WHERE adapter='mta' LIMIT 1").fetchone():
+        adapters.append(MTAAdapter())
+    key = secrets.retrieve(conn, "airnow") if secrets.exists(conn, "airnow") else None
+    if key:
+        adapters.append(AirNowAdapter(api_key=key))
+    return tuple(adapters)
+
+
 async def poll_loop(stop: asyncio.Event) -> None:
-    adapters = (OpenMeteoAdapter(), NWSAdapter())
     while not stop.is_set():
         conn = db.connect()
         try:
             engaged = _viewer_recent(conn)
-            for loc in conn.execute("SELECT * FROM location").fetchall():
-                for adapter in adapters:
+            for loc in conn.execute("SELECT * FROM location"
+                                    " WHERE is_primary=1").fetchall():
+                for adapter in _active_adapters(conn):
                     if _due(adapter, loc, engaged):
                         await _fetch_and_store(conn, adapter, loc)
         finally:
