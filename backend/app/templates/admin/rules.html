@@ -1,0 +1,19 @@
+{% extends "admin/base.html" %}
+{% block content %}
+{% for band, rules in bands.items() %}
+<h2>{{ band }}</h2>
+<div class="card">
+  {% for r in rules %}
+  <div class="row">
+    <span>[{{ r.seed_id }}] {{ r.output_text }}
+      {% if not r.acked %}<span class="badge">new</span>{% endif %}
+      {% if r.notes %}<div class="dim">{{ r.notes }}</div>{% endif %}</span>
+    <form class="inline" method="post" action="/admin/rules/{{ r.seed_id }}/toggle">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      <button class="quiet" type="submit">{{ 'On' if r.enabled else 'Off' }}</button>
+    </form>
+  </div>
+  {% endfor %}
+</div>
+{% endfor %}
+{% endblock %}

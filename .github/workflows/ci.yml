@@ -1,0 +1,55 @@
+name: CI
+on: [push, pull_request]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults: { run: { working-directory: backend } }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v4
+      - run: uv sync
+      - run: uv run ruff check .
+      - run: uv run ruff format --check .
+      - run: uv run pytest -q          # includes source-registry policy test
+
+  copy-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Voice-guide hard rules on seed rule copy
+        run: |
+          python3 - <<'EOF'
+          # copy-voice.md hard rules, machine-checkable subset:
+          # no '!', no emoji, primary <= 90 chars (approximated on output_text)
+          import re, sys, pathlib
+          bad = []
+          for p in pathlib.Path("backend/app").rglob("*.py"):
+              for i, line in enumerate(p.read_text().splitlines(), 1):
+                  if 'output_text' in line or 'fire(' in line:
+                      for m in re.findall(r'"([^"]{5,})"', line):
+                          if "!" in m: bad.append(f"{p}:{i} exclamation: {m}")
+                          if len(m) > 90: bad.append(f"{p}:{i} >90 chars: {m}")
+          if bad: print("\n".join(bad)); sys.exit(1)
+          print("copy lint ok")
+          EOF
+
+  build-image:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [test, copy-lint]
+    runs-on: ubuntu-latest
+    permissions: { contents: read, packages: write }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v6
+        with:
+          context: backend
+          push: true
+          tags: ghcr.io/${{ github.repository }}:${{ github.ref_name }}
+      # release manifest is drafted here; minisign signature stays a human,
+      # offline step by design (see plan §8 update pipeline)

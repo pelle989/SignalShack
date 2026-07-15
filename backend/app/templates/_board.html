@@ -1,0 +1,35 @@
+<div class="card primary">
+  <h2>Weather · {{ location_label }}</h2>
+  <div class="msg">{{ primary_msg }}</div>
+  {% for m in secondary_msgs %}<div class="sec">{{ m }}</div>{% endfor %}
+  <div class="stamp">Open-Meteo / NWS · {{ stamp_weather }}</div>
+</div>
+
+<div class="card{% if alerts and alerts_state == 'fresh' %} attn{% endif %}">
+  <h2>Alerts</h2>
+  {% if alerts_state == 'unknown' %}
+    <div class="empty warn">Alert status unknown — waiting for weather service.</div>
+  {% elif alerts_state == 'stale' %}
+    {% for a in alerts %}<div class="alert">{{ a.event }} — {{ a.headline }}</div>{% endfor %}
+    <div class="empty warn">Alert status may be outdated.</div>
+  {% elif alerts %}
+    {% for a in alerts %}
+      <div class="alert"><b>{{ a.severity | upper }}</b> · {{ a.event }}<br>{{ a.headline }}</div>
+    {% endfor %}
+  {% else %}
+    <div class="empty ok">No active alerts.</div>
+  {% endif %}
+  <div class="stamp">NWS · {{ stamp_alerts }}</div>
+</div>
+
+<div class="card">
+  <h2>Household</h2>
+  {% if announcements %}
+    {% for a in announcements %}
+      <div class="ann{% if a.priority %} pri{% endif %}">{{ a.text }}</div>
+    {% endfor %}
+  {% else %}
+    <div class="empty">No announcements.</div>
+  {% endif %}
+  <div class="stamp">local</div>
+</div>

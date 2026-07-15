@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SignalShack Admin</title>
+<style>
+  :root{--bg:#0d1117;--card:#161d27;--edge:#1f2937;--text:#e8edf4;--dim:#8b98a9;
+        --faint:#5c6878;--green:#3fb96b;--amber:#e0a63d;--red:#e05d5d}
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{background:var(--bg);color:var(--text);font-family:-apple-system,"Segoe UI",Roboto,sans-serif;
+       max-width:720px;margin:0 auto;padding:24px 16px}
+  h1{font-size:20px;margin-bottom:4px} h2{font-size:13px;text-transform:uppercase;
+     letter-spacing:.1em;color:var(--faint);margin:22px 0 10px}
+  nav{margin:14px 0 20px;display:flex;gap:14px;font-size:14px}
+  nav a{color:var(--dim);text-decoration:none} nav a:hover{color:var(--text)}
+  .card{background:var(--card);border:1px solid var(--edge);border-radius:10px;padding:16px;margin-bottom:12px}
+  label{display:block;font-size:13px;color:var(--dim);margin:10px 0 4px}
+  input[type=text],input[type=password],input[type=number]{width:100%;padding:9px;border-radius:7px;
+    border:1px solid var(--edge);background:var(--bg);color:var(--text);font-size:14px}
+  button{background:var(--green);color:#08120b;border:0;border-radius:7px;padding:9px 18px;
+    font-size:14px;font-weight:600;margin-top:12px;cursor:pointer}
+  button.quiet{background:var(--card);color:var(--dim);border:1px solid var(--edge)}
+  .error{color:var(--red);font-size:13px;margin:8px 0}
+  .ok{color:var(--green)} .warn{color:var(--amber)} .dim{color:var(--dim);font-size:13px}
+  .row{display:flex;justify-content:space-between;align-items:center;padding:8px 0;
+       border-bottom:1px solid var(--edge);font-size:14px}
+  .row:last-child{border-bottom:0}
+  .badge{font-size:11px;background:var(--amber);color:#000;border-radius:8px;padding:1px 7px;margin-left:6px}
+  form.inline{display:inline}
+</style>
+</head>
+<body>
+<h1>SignalShack</h1>
+{% if csrf %}<nav>
+  <a href="/admin">Status</a><a href="/admin/announcements">Announcements</a>
+  <a href="/admin/rules">Signal Rules</a><a href="/display">Display →</a>
+</nav>{% endif %}
+{% block content %}{% endblock %}
+</body></html>

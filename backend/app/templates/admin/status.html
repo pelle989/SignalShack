@@ -1,0 +1,29 @@
+{% extends "admin/base.html" %}
+{% block content %}
+<h2>Sources</h2>
+<div class="card">
+  {% for s in sources %}
+  <div class="row">
+    <span>{{ s.name }} <span class="dim">· {{ s.stamp }}</span></span>
+    <span>
+      <span class="{% if s.state == 'fresh' %}ok{% elif s.state == 'stale' %}warn{% else %}warn{% endif %}">{{ s.state }}</span>
+      <form class="inline" method="post" action="/admin/refresh/{{ s.name }}">
+        <input type="hidden" name="csrf" value="{{ csrf }}">
+        <button class="quiet" type="submit">Refresh now</button>
+      </form>
+    </span>
+  </div>
+  {% endfor %}
+</div>
+<h2>Location</h2>
+<div class="card dim">
+  {% if location %}{{ location.label }} · {{ location.latitude }}, {{ location.longitude }}
+  {% else %}No location configured.{% endif %}
+</div>
+<h2>Recent events</h2>
+<div class="card">
+  {% for e in events %}<div class="row dim"><span>{{ e.ts }}</span><span>{{ e.service }} · {{ e.event_type }}</span></div>
+  {% else %}<div class="dim">No events.</div>{% endfor %}
+</div>
+<form method="post" action="/admin/logout"><button class="quiet">Log out</button></form>
+{% endblock %}

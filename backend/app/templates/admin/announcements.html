@@ -1,0 +1,28 @@
+{% extends "admin/base.html" %}
+{% block content %}
+<h2>Post an announcement</h2>
+<div class="card">
+  <form method="post" action="/admin/announcements">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <label>Message (appears on the display within ~30 seconds)</label>
+    <input type="text" name="text" maxlength="200" required>
+    <label>Expires after (hours)</label>
+    <input type="number" name="hours" value="12" min="1" max="168">
+    <label><input type="checkbox" name="priority" value="1"> Priority</label>
+    <button type="submit">Post</button>
+  </form>
+</div>
+<h2>Active & recent</h2>
+<div class="card">
+  {% for a in items %}
+  <div class="row">
+    <span>{% if a.priority %}● {% endif %}{{ a.text }}
+      <span class="dim">{% if a.expires_at and a.expires_at < now %}expired{% elif a.expires_at %}until {{ a.expires_at[11:16] }}{% endif %}</span></span>
+    <form class="inline" method="post" action="/admin/announcements/{{ a.id }}/delete">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      <button class="quiet" type="submit">Remove</button>
+    </form>
+  </div>
+  {% else %}<div class="dim">Nothing yet.</div>{% endfor %}
+</div>
+{% endblock %}

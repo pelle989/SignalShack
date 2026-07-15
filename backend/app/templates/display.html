@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SignalShack</title>
+<script src="/static/htmx.min.js"></script>
+<style>
+  :root{--bg:#0d1117;--card:#161d27;--edge:#1f2937;--text:#e8edf4;--dim:#8b98a9;
+        --faint:#5c6878;--green:#3fb96b;--amber:#e0a63d;--red:#e05d5d}
+  *{margin:0;padding:0;box-sizing:border-box}
+  html,body{height:100%}
+  body{background:var(--bg);color:var(--text);
+       font-family:-apple-system,"Segoe UI",Roboto,sans-serif;
+       display:flex;flex-direction:column;padding:2.2vh 2.2vw;gap:1.8vh}
+  header{display:flex;justify-content:space-between;align-items:baseline}
+  .clock{font-size:5.2vh;font-weight:600}
+  .clock small{font-size:2.4vh;font-weight:400;color:var(--dim);margin-left:1.2vw}
+  .pip{display:flex;align-items:center;gap:.6vw;color:var(--dim);font-size:1.9vh}
+  .pip .dot{width:1.4vh;height:1.4vh;border-radius:50%;background:var(--green)}
+  #board{flex:1;display:grid;gap:1.6vh;grid-template-columns:2fr 1fr;grid-template-rows:1fr 1fr}
+  .card{background:var(--card);border:1px solid var(--edge);border-radius:14px;
+        padding:2.4vh 1.6vw;display:flex;flex-direction:column}
+  .card h2{font-size:1.7vh;font-weight:600;text-transform:uppercase;
+           letter-spacing:.12em;color:var(--faint);margin-bottom:1.4vh}
+  .stamp{margin-top:auto;padding-top:1.2vh;font-size:1.5vh;color:var(--faint)}
+  .primary{grid-row:span 2}
+  .msg{font-size:4.6vh;font-weight:600;line-height:1.25;margin-bottom:2vh}
+  .sec{font-size:2.5vh;color:var(--dim);line-height:1.35;padding-left:1vw;
+       border-left:3px solid var(--edge);margin-bottom:1.4vh}
+  .empty{font-size:2.4vh;color:var(--dim)}
+  .empty.ok::before{content:"✓ ";color:var(--green)}
+  .empty.warn{color:var(--amber)}
+  .alert{font-size:2.3vh;line-height:1.4;margin-bottom:1.2vh}
+  .alert b{color:var(--amber)}
+  .attn{border-color:rgba(224,166,61,.55)}
+  .ann{font-size:2.3vh;margin-bottom:1vh;color:var(--dim)}
+  .ann.pri{color:var(--text)} .ann.pri::before{content:"● ";color:var(--amber)}
+</style>
+</head>
+<body>
+  <header>
+    <div class="clock"><span id="t">--:--</span><small id="d"></small></div>
+    <div class="pip"><span class="dot"></span><span>starting up</span></div>
+  </header>
+
+  <!-- board fragment: htmx polls; pauses when tab hidden (presence honesty) -->
+  <div id="board" hx-get="/fragments/board" hx-trigger="load, every 20s [document.visibilityState === 'visible']" hx-swap="innerHTML">
+    <div class="card primary"><h2>Weather</h2><div class="empty">Loading…</div></div>
+  </div>
+
+<script>
+  function tick(){
+    const n = new Date();
+    document.getElementById("t").textContent =
+      n.toLocaleTimeString("en-US", {hour: "numeric", minute: "2-digit"});
+    document.getElementById("d").textContent = " " +
+      n.toLocaleDateString("en-US", {weekday: "long", month: "long", day: "numeric"});
+  }
+  tick(); setInterval(tick, 1000);
+</script>
+</body>
+</html>

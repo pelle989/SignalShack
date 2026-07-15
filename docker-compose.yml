@@ -1,0 +1,13 @@
+services:
+  signalshack:
+    build: ./backend
+    restart: unless-stopped
+    ports:
+      - "80:8000"
+    volumes:
+      - ./backend/data:/app/data          # SQLite lives on the host
+    environment:
+      - TZ=${TZ:-America/New_York}
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
