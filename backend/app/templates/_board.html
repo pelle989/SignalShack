@@ -2,14 +2,20 @@
   <span class="dot {{ pip.state }}"></span><span>{{ pip.label }}</span>
 </div>
 
-<div class="card primary">
+{# cards render in the household's chosen order; first card = primary slot #}
+{% for card in layout %}
+{% set primary = loop.first %}
+
+{% if card == 'weather' %}
+<div class="card{% if primary %} primary{% endif %}">
   <h2>Weather · {{ location_label }}</h2>
   <div class="msg">{{ primary_msg }}</div>
   {% for m in secondary_msgs %}<div class="sec">{{ m }}</div>{% endfor %}
   <div class="stamp">Open-Meteo / NWS · {{ stamp_weather }}</div>
 </div>
 
-<div class="card{% if alerts_attention == 'red' %} attn-red{% elif alerts_attention == 'amber' %} attn-amber{% endif %}">
+{% elif card == 'alerts' %}
+<div class="card{% if primary %} primary{% endif %}{% if alerts_attention == 'red' %} attn-red{% elif alerts_attention == 'amber' %} attn-amber{% endif %}">
   <h2>Alerts</h2>
   {% if alerts_state == 'unknown' %}
     <div class="empty warn">Alert status unknown — waiting for weather service.</div>
@@ -28,8 +34,9 @@
   <div class="stamp">NWS · {{ stamp_alerts }}</div>
 </div>
 
+{% elif card == 'transit' %}
 {% for t in transit %}
-<div class="card{% if t.attention == 'red' %} attn-red{% elif t.attention == 'amber' %} attn-amber{% endif %}">
+<div class="card{% if primary and loop.first %} primary{% endif %}{% if t.attention == 'red' %} attn-red{% elif t.attention == 'amber' %} attn-amber{% endif %}">
   <h2><span class="bullet" style="background:{{ t.color }};{% if t.dark_text %}color:#111{% endif %}">{{ t.line if t.line not in ('LIRR','MNR') else '' }}</span>
       {{ 'LIRR' if t.line == 'LIRR' else 'Metro-North' if t.line == 'MNR' else t.line ~ ' Train' }}</h2>
   <div class="line-status {{ 'ok' if t.status == 'good' else 'late' if t.attention == 'amber' else 'bad' if t.attention == 'red' else 'dim' }}">{{ t.label }}</div>
@@ -39,8 +46,8 @@
 </div>
 {% endfor %}
 
-{% if air %}
-<div class="card{% if air.aqi and air.aqi > 100 %} attn-amber{% endif %}">
+{% elif card == 'air' %}
+<div class="card{% if primary %} primary{% endif %}{% if air.aqi and air.aqi > 100 %} attn-amber{% endif %}">
   <h2>Air quality</h2>
   {% if air.state == 'unavailable' and air.aqi is none %}
     <div class="empty">Waiting for first reading…</div>
@@ -53,9 +60,9 @@
   {% if air.state == 'stale' %}<div class="empty warn">Reading may be outdated.</div>{% endif %}
   <div class="stamp">AirNow (US EPA) · {{ air.stamp }}</div>
 </div>
-{% endif %}
 
-<div class="card">
+{% elif card == 'announcements' %}
+<div class="card{% if primary %} primary{% endif %}">
   <h2>Household</h2>
   {% if announcements %}
     {% for a in announcements %}
@@ -66,3 +73,6 @@
   {% endif %}
   <div class="stamp">local</div>
 </div>
+{% endif %}
+
+{% endfor %}

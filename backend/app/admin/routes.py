@@ -11,7 +11,7 @@ from fastapi.templating import Jinja2Templates
 
 from app.adapters.nws import NWSAdapter
 from app.adapters.open_meteo import OpenMeteoAdapter
-from app.core import backup, config_mgr, db, diagnostics, secrets, security, snapshots
+from app.core import backup, config_mgr, db, diagnostics, layout, secrets, security, snapshots
 from app.jobs import scheduler
 
 router = APIRouter(prefix="/admin")
@@ -472,6 +472,46 @@ async def privacy_page(request: Request):
         if isinstance(guard, RedirectResponse):
             return guard
         return _render(request, "privacy.html", guard)
+    finally:
+        conn.close()
+
+
+# ---------------------------------------------------------------- layout
+
+CARD_LABELS = {"weather": "Weather Meaning", "alerts": "NWS Alerts",
+               "transit": "Transit lines", "air": "Air Quality",
+               "announcements": "Household announcements"}
+
+
+@router.get("/layout", response_class=HTMLResponse)
+async def layout_page(request: Request):
+    conn = db.connect()
+    try:
+        guard = _guard(request, conn)
+        if isinstance(guard, RedirectResponse):
+            return guard
+        cards = [{"type": c["type"], "enabled": c["enabled"],
+                  "label": CARD_LABELS[c["type"]]}
+                 for c in layout.get_layout(conn)]
+        return _render(request, "layout.html", guard, cards=cards)
+    finally:
+        conn.close()
+
+
+@router.post("/layout/{card_type}/{action}")
+async def layout_action(request: Request, card_type: str, action: str,
+                        csrf: str = Form(None)):
+    conn = db.connect()
+    try:
+        guard = _guard(request, conn)
+        if isinstance(guard, RedirectResponse):
+            return guard
+        if security.check_csrf(guard, csrf) and card_type in layout.CARD_TYPES:
+            if action in ("up", "down"):
+                layout.move(conn, card_type, action)
+            elif action == "toggle":
+                layout.toggle(conn, card_type)
+        return RedirectResponse("/admin/layout", status_code=303)
     finally:
         conn.close()
 

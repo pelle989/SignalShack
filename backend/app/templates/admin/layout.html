@@ -1,0 +1,31 @@
+{% extends "admin/base.html" %}
+{% block content %}
+<h2>Board layout</h2>
+<div class="card">
+  <p class="dim">Top card takes the big primary slot. Cards flow in this order
+  on the TV; the phone view stacks the same way. Off keeps the card's settings
+  — nothing is deleted.</p>
+  {% for c in cards %}
+  <div class="row">
+    <span style="{% if not c.enabled %}opacity:.45{% endif %}">
+      {{ loop.index }}. {{ c.label }}{% if loop.first and c.enabled %} <span class="dim">· primary</span>{% endif %}</span>
+    <span>
+      <form class="inline" method="post" action="/admin/layout/{{ c.type }}/up">
+        <input type="hidden" name="csrf" value="{{ csrf }}">
+        <button class="quiet" {% if loop.first %}disabled{% endif %}>↑</button>
+      </form>
+      <form class="inline" method="post" action="/admin/layout/{{ c.type }}/down">
+        <input type="hidden" name="csrf" value="{{ csrf }}">
+        <button class="quiet" {% if loop.last %}disabled{% endif %}>↓</button>
+      </form>
+      <form class="inline" method="post" action="/admin/layout/{{ c.type }}/toggle">
+        <input type="hidden" name="csrf" value="{{ csrf }}">
+        <button class="quiet">{{ 'On' if c.enabled else 'Off' }}</button>
+      </form>
+    </span>
+  </div>
+  {% endfor %}
+  <p class="dim" style="margin-top:10px">Transit and Air Quality appear on the
+  board only when configured (watched lines / AirNow key).</p>
+</div>
+{% endblock %}

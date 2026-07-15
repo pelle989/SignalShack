@@ -15,7 +15,7 @@ from app.adapters.mta import MTAAdapter, line_view
 from app.adapters.nws import NWSAdapter
 from app.adapters.open_meteo import OpenMeteoAdapter
 from app.adapters.weather_derive import derive_fields
-from app.core import secrets, snapshots
+from app.core import layout, secrets, snapshots
 from app.rules.engine import compose, evaluate
 
 SEEDS = json.loads(
@@ -59,6 +59,7 @@ def compose_board(conn: sqlite3.Connection, now: datetime | None = None) -> dict
     if loc is None:
         ctx["primary_msg"] = "Setup not complete — visit /admin/setup."
         ctx["pip"] = {"state": "amber", "label": "setup needed"}
+        ctx["layout"] = ["weather", "alerts", "announcements"]
         return ctx
 
     # ---- weather meaning
@@ -160,6 +161,7 @@ def compose_board(conn: sqlite3.Connection, now: datetime | None = None) -> dict
         (now.isoformat(timespec='seconds'),)).fetchall()
     ctx["announcements"] = [{"text": r["text"], "priority": r["priority"]} for r in rows]
 
+    ctx["layout"] = layout.visible_order(conn, ctx)
     ctx["pip"] = _pip(ctx)
     return ctx
 

@@ -70,7 +70,7 @@ def test_announcement_text_is_escaped(tmp_path, monkeypatch):
                       alerts_state="fresh", alerts_attention=None,
                       announcements=[{"text": "<script>alert(1)</script>", "priority": 1}],
                       stamp_weather="test", stamp_alerts="test",
-                      location_label="Home",
+                      location_label="Home", layout=["weather", "announcements"],
                       pip={"state": "green", "label": "test"})
     assert "<script>alert(1)</script>" not in html
     assert "&lt;script&gt;" in html
