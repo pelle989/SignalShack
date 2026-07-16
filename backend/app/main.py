@@ -6,17 +6,18 @@ must always render *something* labeled — see CLAUDE.md invariant 2.
 
 import asyncio
 import os
+import secrets as pysecrets
 from contextlib import asynccontextmanager
 from datetime import datetime
 from pathlib import Path
 
-from fastapi import FastAPI, Request
-from fastapi.responses import HTMLResponse
+from fastapi import FastAPI, Form, Request
+from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from app.admin.routes import router as admin_router
-from app.core import db, security
+from app.core import config_mgr, db, security
 from app.display.service import compose_board
 from app.jobs import scheduler
 from app.rules.sync import sync_seeds
@@ -93,9 +94,88 @@ def health() -> dict:
     return {"status": "ok", "ts": datetime.now().isoformat(timespec="seconds")}
 
 
+def _display_pin(conn) -> str:
+    return str(config_mgr.get_settings(conn).get("display_pin") or "")
+
+
 @app.get("/display", response_class=HTMLResponse)
 def display(request: Request):
+    conn = db.connect()
+    try:
+        pin = _display_pin(conn)
+    finally:
+        conn.close()
+    if pin and not security.display_unlocked(request):
+        return templates.TemplateResponse(request, "pin.html", {"error": None})
     return templates.TemplateResponse(request, "display.html", {})
+
+
+@app.post("/display/unlock", response_class=HTMLResponse)
+def display_unlock(request: Request, pin: str = Form("")):
+    conn = db.connect()
+    try:
+        wanted = _display_pin(conn)
+    finally:
+        conn.close()
+    ip = request.client.host if request.client else "unknown"
+    if security.rate_limited(f"display:{ip}"):
+        return templates.TemplateResponse(request, "pin.html",
+                                          {"error": "Too many tries — wait 15 minutes."})
+    if not wanted or not pysecrets.compare_digest(pin.strip(), wanted):
+        security.record_attempt(f"display:{ip}")
+        return templates.TemplateResponse(request, "pin.html",
+                                          {"error": "Wrong PIN."})
+    resp = RedirectResponse("/display", status_code=303)
+    resp.set_cookie(security.DISPLAY_COOKIE, security.make_display_cookie(),
+                    httponly=True, samesite="lax", max_age=365 * 24 * 3600)
+    return resp
+
+
+# ---- /announce: PIN-gated quick post, no admin login (plan V1.1)
+
+@app.get("/announce", response_class=HTMLResponse)
+def announce_form(request: Request):
+    conn = db.connect()
+    try:
+        enabled = bool(config_mgr.get_settings(conn).get("announce_pin"))
+    finally:
+        conn.close()
+    return templates.TemplateResponse(request, "announce.html",
+                                      {"enabled": enabled, "error": None,
+                                       "posted": False})
+
+
+@app.post("/announce", response_class=HTMLResponse)
+def announce_post(request: Request, pin: str = Form(""), text: str = Form(""),
+                  priority: str = Form("")):
+    conn = db.connect()
+    try:
+        wanted = str(config_mgr.get_settings(conn).get("announce_pin") or "")
+        ctx = {"enabled": bool(wanted), "error": None, "posted": False}
+        if not wanted:
+            return templates.TemplateResponse(request, "announce.html", ctx)
+        ip = request.client.host if request.client else "unknown"
+        if security.rate_limited(f"announce:{ip}", limit=10):
+            ctx["error"] = "Too many posts — wait a bit."
+        elif not pysecrets.compare_digest(pin.strip(), wanted):
+            security.record_attempt(f"announce:{ip}")
+            ctx["error"] = "Wrong PIN."
+        elif not text.strip():
+            ctx["error"] = "Write a message first."
+        else:
+            from datetime import timedelta
+            now = datetime.now()
+            with conn:
+                conn.execute(
+                    "INSERT INTO announcement (text, priority, created_at,"
+                    " expires_at) VALUES (?, ?, ?, ?)",
+                    (text.strip()[:200], 1 if priority else 0,
+                     now.isoformat(timespec="seconds"),
+                     (now + timedelta(hours=12)).isoformat(timespec="seconds")))
+            ctx["posted"] = True
+        return templates.TemplateResponse(request, "announce.html", ctx)
+    finally:
+        conn.close()
 
 
 @app.get("/fragments/board", response_class=HTMLResponse)

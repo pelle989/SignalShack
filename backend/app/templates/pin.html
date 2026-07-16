@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SignalShack</title>
+<style>
+  body{background:#0d1117;color:#e8edf4;font-family:-apple-system,"Segoe UI",Roboto,sans-serif;
+       display:flex;align-items:center;justify-content:center;height:100vh;margin:0}
+  .card{background:#161d27;border:1px solid #1f2937;border-radius:14px;padding:28px;text-align:center}
+  input{font-size:22px;text-align:center;letter-spacing:.3em;width:180px;padding:10px;
+        border-radius:8px;border:1px solid #1f2937;background:#0d1117;color:#e8edf4}
+  button{background:#3fb96b;color:#08120b;border:0;border-radius:8px;padding:10px 24px;
+         font-size:15px;font-weight:600;margin-top:14px;cursor:pointer}
+  .error{color:#e05d5d;font-size:13px;margin-top:8px}
+</style></head>
+<body>
+  <form class="card" method="post" action="/display/unlock">
+    <p style="margin:0 0 12px;color:#8b98a9">Enter the display PIN</p>
+    <input type="password" name="pin" inputmode="numeric" autofocus>
+    {% if error %}<div class="error">{{ error }}</div>{% endif %}
+    <br><button type="submit">Unlock</button>
+  </form>
+</body></html>

@@ -113,7 +113,7 @@ def derive_fields(hourly: dict, daily: dict, day_iso: str, now_h: int,
     if first_warm:
         season_state["first_warm"] = sy
 
-    return {
+    fields = {
         # --- safety inputs
         "wind_chill_min_morning": min((wind_chill(temp[i], wind[i]) or 99
                                        for i in range(5, 10)), default=None),
@@ -171,3 +171,38 @@ def derive_fields(hourly: dict, daily: dict, day_iso: str, now_h: int,
         "first_freeze_of_season": first_freeze,
         "first_warm_day_of_season": first_warm,
     }
+    return fields
+
+
+def derive_tomorrow(hourly: dict, daily: dict, day_iso: str) -> dict | None:
+    """Three-phrase forward look for the Tomorrow strip (plan V1.1).
+    Informational only — rules never fire on tomorrow's data."""
+    D = daily
+    dt = D["time"].index(day_iso)
+    if dt + 1 >= len(D["time"]):
+        return None
+    high_today = _f(D["temperature_2m_max"][dt])
+    high_tmrw = _f(D["temperature_2m_max"][dt + 1])
+    if high_today is None or high_tmrw is None:
+        return None
+    delta = high_tmrw - high_today
+
+    tomorrow_iso = D["time"][dt + 1]
+    idx_t = [i for i, t in enumerate(hourly["time"]) if t.startswith(tomorrow_iso)]
+    pop_max = max(((_f(hourly["precipitation_probability"][i]) or 0)
+                   for i in idx_t), default=0)
+    idx_now = [i for i, t in enumerate(hourly["time"]) if t.startswith(day_iso)]
+    dew_today = max(((_f(hourly["dew_point_2m"][i]) or 0) for i in idx_now), default=0)
+    dew_tmrw = max(((_f(hourly["dew_point_2m"][i]) or 0) for i in idx_t), default=0)
+
+    phrases = []
+    phrases.append("Warmer." if delta >= 5 else "Cooler." if delta <= -5
+                   else "Similar temps.")
+    phrases.append("Rain likely." if pop_max >= 60 else "Rain possible."
+                   if pop_max >= 40 else "Dry.")
+    dew_delta = dew_tmrw - dew_today
+    if dew_delta <= -4:
+        phrases.append("Less humid.")
+    elif dew_delta >= 4:
+        phrases.append("Muggier.")
+    return {"text": " ".join(phrases), "confidence": "1-day outlook · high confidence"}

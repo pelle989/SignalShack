@@ -1,4 +1,4 @@
-"""Board composition — snapshots → derived fields → seed rules → card context.
+"""Board composition — snapshots → derived fields → rules → card context.
 
 AIDEV-NOTE: this is where invariant 2 gets rendered: every card resolves to a
 labeled state. Alerts especially — SAFETY: a missing/stale NWS snapshot renders
@@ -14,8 +14,9 @@ from app.adapters.airnow import AirNowAdapter
 from app.adapters.mta import MTAAdapter, line_view
 from app.adapters.nws import NWSAdapter
 from app.adapters.open_meteo import OpenMeteoAdapter
-from app.adapters.weather_derive import derive_fields
+from app.adapters.weather_derive import derive_fields, derive_tomorrow
 from app.core import layout, secrets, snapshots
+from app.rules import user as user_rules
 from app.rules.engine import compose, evaluate
 
 SEEDS = json.loads(
@@ -54,7 +55,8 @@ def compose_board(conn: sqlite3.Connection, now: datetime | None = None) -> dict
            "primary_msg": None, "secondary_msgs": [], "weather_state": "unavailable",
            "alerts_state": "unknown", "alerts": [], "alerts_attention": None,
            "announcements": [], "transit": [], "stamp_transit": None,
-           "air": None, "location_label": loc["label"] if loc else "Home"}
+           "air": None, "tomorrow": None,
+           "location_label": loc["label"] if loc else "Home"}
 
     if loc is None:
         ctx["primary_msg"] = "Setup not complete — visit /admin/setup."
@@ -103,9 +105,20 @@ def compose_board(conn: sqlite3.Connection, now: datetime | None = None) -> dict
                 if not _rule_enabled(conn, r["id"]):
                     continue
                 recent = len([d for d in caps.get(r["id"], []) if d >= week_ago])
-                f = evaluate(r, fields, month=now.month, recent_fires_7d=recent)
+                f = evaluate(r, fields, month=now.month, recent_fires_7d=recent,
+                             hour=now.hour)          # display-time windows
                 if f:
                     fired.append(f)
+            # user-created rules run through the same engine (plan §7.1a)
+            for r in user_rules.load_enabled(conn):
+                f = evaluate(r, fields, month=now.month, hour=now.hour)
+                if f:
+                    fired.append(f)
+            try:
+                ctx["tomorrow"] = derive_tomorrow(om_snap["payload"]["hourly"],
+                                                  om_snap["payload"]["daily"], today)
+            except (KeyError, ValueError):
+                ctx["tomorrow"] = None
             _fire_caps(conn, [f.rule_id for f in fired
                               if any(s.get("max_fires_per_7d") and s["id"] == f.rule_id
                                      for s in SEEDS)], today)
@@ -164,6 +177,26 @@ def compose_board(conn: sqlite3.Connection, now: datetime | None = None) -> dict
     ctx["layout"] = layout.visible_order(conn, ctx)
     ctx["pip"] = _pip(ctx)
     return ctx
+
+
+def get_live_fields(conn: sqlite3.Connection,
+                    now: datetime | None = None) -> dict | None:
+    """Current derived fields for the rule editor's preview.
+    AIDEV-CAUTION: passes a COPY of season_state — a preview must never
+    consume a one-shot (first-freeze etc.)."""
+    now = now or datetime.now()
+    loc = conn.execute("SELECT * FROM location WHERE is_primary=1").fetchone()
+    if loc is None:
+        return None
+    snap = snapshots.latest(conn, loc["id"], "open_meteo")
+    if snap is None:
+        return None
+    try:
+        state_copy = dict(snapshots.kv_get(conn, "season_state", {}))
+        return derive_fields(snap["payload"]["hourly"], snap["payload"]["daily"],
+                             now.date().isoformat(), now.hour, state_copy)
+    except (KeyError, ValueError):
+        return None
 
 
 def _pip(ctx: dict) -> dict:

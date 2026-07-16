@@ -4,6 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>SignalShack</title>
+<link rel="manifest" href="/static/manifest.json">
+<meta name="theme-color" content="#0d1117">
+<link rel="icon" href="/static/icon.svg">
 <script src="/static/htmx.min.js"></script>
 <style>
   :root{--bg:#0d1117;--card:#161d27;--edge:#1f2937;--text:#e8edf4;--dim:#8b98a9;
@@ -60,6 +63,12 @@
   .line-status.ok{color:var(--green)} .line-status.late{color:var(--amber)}
   .line-status.bad{color:var(--red)} .line-status.dim{color:var(--dim)}
   .line-head{font-size:1.9vh;color:var(--dim);line-height:1.35;margin-top:.8vh}
+  .tomorrow-strip{grid-column:1/-1;background:#10161f;border:1px solid var(--edge);
+                  border-radius:14px;padding:1.4vh 1.6vw;display:flex;
+                  justify-content:space-between;align-items:center;min-height:auto}
+  .tomorrow-strip span{font-size:2.2vh;color:var(--dim)}
+  .tomorrow-strip b{color:var(--text)}
+  .tomorrow-strip .conf{font-size:1.5vh;color:var(--faint)}
   .ann{font-size:2.3vh;line-height:1.4;margin-bottom:1.1vh;color:var(--dim)}
   .ann.pri{color:var(--text)} .ann.pri::before{content:"● ";color:var(--amber)}
   .ann::before{content:"○ ";color:var(--faint)}

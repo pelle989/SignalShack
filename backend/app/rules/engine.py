@@ -59,10 +59,16 @@ class _Safe(dict):
 
 
 def evaluate(rule: dict, fields: dict, month: int,
-             recent_fires_7d: int = 0) -> Fired | None:
+             recent_fires_7d: int = 0, hour: int | None = None) -> Fired | None:
     """rule: {id, priority, topic, conditions[], output, months?, window?,
-    max_fires_per_7d?}. Returns Fired or None."""
+    window_hours?, max_fires_per_7d?}. Returns Fired or None.
+
+    window_hours=[start, end): display-time gating — a commute rule doesn't
+    belong on an 8 PM board. hour=None (e.g. Phase M digests) skips gating."""
     if rule.get("months") and month not in rule["months"]:
+        return None
+    wh = rule.get("window_hours")
+    if wh and hour is not None and not (wh[0] <= hour < wh[1]):
         return None
     if rule.get("max_fires_per_7d") and recent_fires_7d >= rule["max_fires_per_7d"]:
         return None

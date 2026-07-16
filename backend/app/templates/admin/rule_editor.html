@@ -1,0 +1,56 @@
+{% extends "admin/base.html" %}
+{% block content %}
+<h2>{{ 'Edit rule' if rule_id else 'New rule' }}</h2>
+{% for p in problems %}<div class="error">{{ p }}</div>{% endfor %}
+<form method="post" action="/admin/rules/save">
+  <input type="hidden" name="csrf" value="{{ csrf }}">
+  {% if rule_id %}<input type="hidden" name="rule_id" value="{{ rule_id }}">{% endif %}
+  <div class="card">
+    <label>Rule name (only you see this)</label>
+    <input type="text" name="name" value="{{ draft.name }}" maxlength="60" required>
+    <label>Message shown on the board (≤90 characters, calm, action-first)</label>
+    <input type="text" name="output" value="{{ draft.output }}" maxlength="120" required>
+    <label>Private notes (optional)</label>
+    <input type="text" name="notes" value="{{ draft.notes }}" maxlength="200">
+  </div>
+  <h2>When all of these are true</h2>
+  <div class="card">
+    <div id="conds">
+      {% for cond in draft.conditions %}
+        {% include "admin/_rule_row.html" %}
+      {% endfor %}
+    </div>
+    <button type="button" class="quiet" hx-get="/admin/rules/row"
+            hx-target="#conds" hx-swap="beforeend">+ condition</button>
+    <p class="dim" style="margin-top:8px">true/false fields take <b>true</b> or
+    <b>false</b>; 'between' takes two numbers like <b>[55, 70]</b>.</p>
+  </div>
+  <h2>When it can appear</h2>
+  <div class="card">
+    <label>Priority band</label>
+    <select name="band">
+      {% for key, pair in bands.items() %}
+      <option value="{{ key }}" {% if draft.band == key %}selected{% endif %}>{{ pair[0] }}</option>
+      {% endfor %}
+    </select>
+    <label>Season</label>
+    <select name="season">
+      <option value="all" {% if draft.season == 'all' %}selected{% endif %}>All year</option>
+      <option value="warm" {% if draft.season == 'warm' %}selected{% endif %}>May–September</option>
+      <option value="cold" {% if draft.season == 'cold' %}selected{% endif %}>October–April</option>
+    </select>
+    <label>Time window (optional — hours 0–24, e.g. 16 to 21)</label>
+    <div style="display:flex;gap:8px">
+      <input type="number" name="window_start" min="0" max="23" value="{{ draft.window_start }}" placeholder="from">
+      <input type="number" name="window_end" min="1" max="24" value="{{ draft.window_end }}" placeholder="to">
+    </div>
+  </div>
+  <div class="card">
+    <button type="button" class="quiet" hx-post="/admin/rules/preview"
+            hx-include="closest form" hx-target="#preview">Preview against today</button>
+    <div id="preview" style="margin-top:10px"></div>
+    <button type="submit">Save rule</button>
+  </div>
+</form>
+<script src="/static/htmx.min.js"></script>
+{% endblock %}

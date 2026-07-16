@@ -133,7 +133,7 @@ def test_seed_update_survival_invariant(tmp_path, monkeypatch):
         conn.execute("UPDATE rule_user_state SET enabled=0 WHERE rule_id=?", (rid,))
     import app.rules.sync as sync_mod
     data = json.loads(sync_mod.SEEDS_PATH.read_text())
-    data["seed_version"] = 3
+    data["seed_version"] += 1
     new_rule = {"id": "X1", "priority": 40, "topic": "test",
                 "conditions": [{"field": "f", "op": ">=", "value": 1}],
                 "output": "New rule copy."}

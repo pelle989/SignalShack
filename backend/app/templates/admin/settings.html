@@ -19,6 +19,19 @@
   <p class="dim">Every save is validated, health-checked, and rolls back
   automatically if it would break the display.</p>
 </div>
+<h2>Household access</h2>
+<div class="card">
+  <form method="post" action="/admin/settings/pins">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <label>Announce PIN — lets anyone on your WiFi post announcements at
+    /announce without the admin password (4–8 digits, blank = off)</label>
+    <input type="text" name="announce_pin" value="{{ settings.announce_pin }}" inputmode="numeric">
+    <label>Display PIN — require a one-time PIN before a device can view the
+    board (blank = open to your WiFi, the default)</label>
+    <input type="text" name="display_pin" value="{{ settings.display_pin }}" inputmode="numeric">
+    <button type="submit">Save PINs</button>
+  </form>
+</div>
 <h2>Air quality (AirNow)</h2>
 <div class="card">
   {% if airnow_configured %}

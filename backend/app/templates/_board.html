@@ -61,6 +61,12 @@
   <div class="stamp">AirNow (US EPA) · {{ air.stamp }}</div>
 </div>
 
+{% elif card == 'tomorrow' %}
+<div class="tomorrow-strip">
+  <span><b>Tomorrow:</b> {{ tomorrow.text }}</span>
+  <span class="conf">{{ tomorrow.confidence }}</span>
+</div>
+
 {% elif card == 'announcements' %}
 <div class="card{% if primary %} primary{% endif %}">
   <h2>Household</h2>

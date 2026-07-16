@@ -423,6 +423,29 @@ async def settings_page(request: Request):
         conn.close()
 
 
+@router.post("/settings/pins")
+async def settings_pins(request: Request, announce_pin: str = Form(""),
+                        display_pin: str = Form(""), csrf: str = Form(None)):
+    conn = db.connect()
+    try:
+        guard = _guard(request, conn)
+        if isinstance(guard, RedirectResponse):
+            return guard
+        if security.check_csrf(guard, csrf):
+            current = config_mgr.get_settings(conn)
+            current.update({"announce_pin": announce_pin.strip(),
+                            "display_pin": display_pin.strip()})
+            ok, problems = config_mgr.apply_settings(conn, current)
+            if not ok:
+                return _render(request, "settings.html", guard,
+                               settings=config_mgr.get_settings(conn),
+                               problems=problems,
+                               airnow_configured=secrets.exists(conn, "airnow"))
+        return RedirectResponse("/admin/settings", status_code=303)
+    finally:
+        conn.close()
+
+
 @router.post("/settings/airnow")
 async def airnow_key(request: Request, api_key: str = Form(""),
                      csrf: str = Form(None)):
@@ -480,7 +503,8 @@ async def privacy_page(request: Request):
 
 CARD_LABELS = {"weather": "Weather Meaning", "alerts": "NWS Alerts",
                "transit": "Transit lines", "air": "Air Quality",
-               "announcements": "Household announcements"}
+               "announcements": "Household announcements",
+               "tomorrow": "Tomorrow strip"}
 
 
 @router.get("/layout", response_class=HTMLResponse)
@@ -575,6 +599,178 @@ async def transit_delete(request: Request, monitor_id: int, csrf: str = Form(Non
         conn.close()
 
 
+# ---------------------------------------------------------------- rule editor
+
+def _editor_ctx(conn, rule_row=None, draft=None, problems=None):
+    from app.rules import user as user_rules
+    ctx = {"fields": user_rules.picker_fields(), "ops": user_rules.VALID_OPS,
+           "bands": user_rules.BANDS, "problems": problems or [],
+           "rule_id": rule_row["id"] if rule_row else None}
+    if draft:                                   # failed save: re-show input
+        ctx["draft"] = draft
+    elif rule_row:                              # editing existing
+        meta = json.loads(rule_row["window_json"] or "{}")
+        wh = meta.get("window_hours") or ["", ""]
+        band = next((k for k, (_, p) in user_rules.BANDS.items()
+                     if p == rule_row["priority"]), "plan")
+        season = next((k for k, m in user_rules.SEASONS.items()
+                       if m == meta.get("months")), "all")
+        ctx["draft"] = {"name": rule_row["name"], "output": rule_row["output_text"],
+                        "band": band, "season": season, "notes": rule_row["notes"] or "",
+                        "window_start": wh[0], "window_end": wh[1],
+                        "conditions": json.loads(rule_row["condition_json"])}
+    else:
+        ctx["draft"] = {"name": "", "output": "", "band": "plan", "season": "all",
+                        "notes": "", "window_start": "", "window_end": "",
+                        "conditions": [{"field": "", "op": ">=", "value": ""}]}
+    return ctx
+
+
+async def _editor_form(request) -> dict:
+    form = await request.form()
+    return {"name": form.get("name"), "output": form.get("output"),
+            "band": form.get("band"), "season": form.get("season"),
+            "topic": form.get("topic"), "notes": form.get("notes") or "",
+            "window_start": form.get("window_start"),
+            "window_end": form.get("window_end"),
+            "cfield": form.getlist("cfield"), "cop": form.getlist("cop"),
+            "cvalue": form.getlist("cvalue"), "csrf": form.get("csrf"),
+            "rule_id": form.get("rule_id")}
+
+
+@router.get("/rules/new", response_class=HTMLResponse)
+async def rule_new(request: Request):
+    conn = db.connect()
+    try:
+        guard = _guard(request, conn)
+        if isinstance(guard, RedirectResponse):
+            return guard
+        return _render(request, "rule_editor.html", guard, **_editor_ctx(conn))
+    finally:
+        conn.close()
+
+
+@router.get("/rules/user/{rule_id}/edit", response_class=HTMLResponse)
+async def rule_edit(request: Request, rule_id: int):
+    conn = db.connect()
+    try:
+        guard = _guard(request, conn)
+        if isinstance(guard, RedirectResponse):
+            return guard
+        row = conn.execute("SELECT * FROM signal_rule WHERE id=? AND is_seed=0",
+                           (rule_id,)).fetchone()
+        if row is None:
+            return RedirectResponse("/admin/rules", status_code=303)
+        return _render(request, "rule_editor.html", guard,
+                       **_editor_ctx(conn, rule_row=row))
+    finally:
+        conn.close()
+
+
+@router.get("/rules/row", response_class=HTMLResponse)
+async def rule_condition_row(request: Request):
+    """htmx: one more empty condition row."""
+    from app.rules import user as user_rules
+    return _render(request, "_rule_row.html", None,
+                   cond={"field": "", "op": ">=", "value": ""},
+                   fields=user_rules.picker_fields(), ops=user_rules.VALID_OPS)
+
+
+@router.post("/rules/preview", response_class=HTMLResponse)
+async def rule_preview(request: Request):
+    """htmx: evaluate the draft against the CURRENT snapshot. No side effects."""
+    from app.display.service import get_live_fields
+    from app.rules import user as user_rules
+    from app.rules.engine import evaluate
+    conn = db.connect()
+    try:
+        guard = _guard(request, conn)
+        if isinstance(guard, RedirectResponse):
+            return guard
+        form = await _editor_form(request)
+        rule, problems = user_rules.validate_and_build(form)
+        if problems:
+            return _render(request, "_preview.html", guard, problems=problems)
+        fields = get_live_fields(conn)
+        if fields is None:
+            return _render(request, "_preview.html", guard,
+                           problems=["No weather data yet — preview needs one fetch."])
+        rule["id"] = "PREVIEW"
+        now = datetime.now()
+        fired = evaluate(rule, fields, month=now.month, hour=now.hour)
+        used = {c["field"]: fields.get(c["field"]) for c in rule["conditions"]}
+        return _render(request, "_preview.html", guard, fired=fired, used=used,
+                       windowed=bool(rule.get("window_hours")))
+    finally:
+        conn.close()
+
+
+@router.post("/rules/save", response_class=HTMLResponse)
+async def rule_save(request: Request):
+    from app.rules import user as user_rules
+    conn = db.connect()
+    try:
+        guard = _guard(request, conn)
+        if isinstance(guard, RedirectResponse):
+            return guard
+        form = await _editor_form(request)
+        if not security.check_csrf(guard, form["csrf"]):
+            return RedirectResponse("/admin/rules", status_code=303)
+        rule, problems = user_rules.validate_and_build(form)
+        if problems:                       # re-render with input preserved
+            draft = {**form, "conditions": [
+                {"field": f, "op": o, "value": v} for f, o, v in
+                zip(form["cfield"], form["cop"], form["cvalue"], strict=False)]}
+            return _render(request, "rule_editor.html", guard,
+                           **_editor_ctx(conn, draft=draft, problems=problems))
+        rid = int(form["rule_id"]) if form.get("rule_id") else None
+        user_rules.save(conn, rule, notes=form["notes"], rule_id=rid)
+        return RedirectResponse("/admin/rules", status_code=303)
+    finally:
+        conn.close()
+
+
+@router.post("/rules/user/{rule_id}/toggle")
+async def rule_user_toggle(request: Request, rule_id: int, csrf: str = Form(None)):
+    conn = db.connect()
+    try:
+        guard = _guard(request, conn)
+        if isinstance(guard, RedirectResponse):
+            return guard
+        if security.check_csrf(guard, csrf):
+            row = conn.execute("SELECT id FROM signal_rule WHERE id=? AND is_seed=0",
+                               (rule_id,)).fetchone()
+            if row:
+                with conn:
+                    conn.execute(
+                        "INSERT INTO rule_user_state (rule_id, enabled,"
+                        " acknowledged_new) VALUES (?, 0, 1)"
+                        " ON CONFLICT(rule_id) DO UPDATE SET enabled = 1 - enabled",
+                        (rule_id,))
+        return RedirectResponse("/admin/rules", status_code=303)
+    finally:
+        conn.close()
+
+
+@router.post("/rules/user/{rule_id}/delete")
+async def rule_user_delete(request: Request, rule_id: int, csrf: str = Form(None)):
+    conn = db.connect()
+    try:
+        guard = _guard(request, conn)
+        if isinstance(guard, RedirectResponse):
+            return guard
+        if security.check_csrf(guard, csrf):
+            with conn:                     # user rules only — seeds are immortal
+                conn.execute("DELETE FROM rule_user_state WHERE rule_id IN"
+                             " (SELECT id FROM signal_rule WHERE id=? AND is_seed=0)",
+                             (rule_id,))
+                conn.execute("DELETE FROM signal_rule WHERE id=? AND is_seed=0",
+                             (rule_id,))
+        return RedirectResponse("/admin/rules", status_code=303)
+    finally:
+        conn.close()
+
+
 # ---------------------------------------------------------------- rule toggles
 
 @router.get("/rules", response_class=HTMLResponse)
@@ -589,13 +785,18 @@ async def rules_page(request: Request):
             " COALESCE(us.enabled, 1) enabled, COALESCE(us.acknowledged_new, 1) acked"
             " FROM signal_rule r LEFT JOIN rule_user_state us ON us.rule_id = r.id"
             " WHERE r.is_seed=1 ORDER BY r.priority DESC").fetchall()
+        user_rows = conn.execute(
+            "SELECT r.id, r.name, r.output_text, COALESCE(us.enabled, 1) enabled"
+            " FROM signal_rule r LEFT JOIN rule_user_state us ON us.rule_id = r.id"
+            " WHERE r.is_seed=0 ORDER BY r.created_at DESC").fetchall()
         bands = {"Safety": [], "Time-sensitive": [], "Planning": [], "Ambient": []}
         for r in rows:
             band = ("Safety" if r["priority"] >= 90 else
                     "Time-sensitive" if r["priority"] >= 60 else
                     "Planning" if r["priority"] >= 30 else "Ambient")
             bands[band].append(r)
-        return _render(request, "rules.html", guard, bands=bands)
+        return _render(request, "rules.html", guard, bands=bands,
+                       user_rules=user_rows)
     finally:
         conn.close()
 

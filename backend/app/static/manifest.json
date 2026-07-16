@@ -1,0 +1,14 @@
+{
+  "name": "SignalShack",
+  "short_name": "SignalShack",
+  "start_url": "/display",
+  "display": "standalone",
+  "background_color": "#0d1117",
+  "theme_color": "#0d1117",
+  "description": "Your household's board — weather meaning, alerts, transit, announcements.",
+  "icons": [{
+    "src": "/static/icon.svg",
+    "sizes": "any",
+    "type": "image/svg+xml"
+  }]
+}

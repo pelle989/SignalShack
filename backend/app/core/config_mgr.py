@@ -13,6 +13,8 @@ DEFAULTS = {
     "night_start": "22:00",
     "night_end": "05:30",
     "display_poll_seconds": 20,
+    "announce_pin": "",      # empty = /announce page disabled
+    "display_pin": "",       # empty = display open to the LAN (default)
 }
 
 
@@ -39,6 +41,10 @@ def _validate(settings: dict) -> list[str]:
     poll = settings.get("display_poll_seconds", 20)
     if not isinstance(poll, int) or not 10 <= poll <= 120:
         problems.append("display_poll_seconds: must be 10–120")
+    for key in ("announce_pin", "display_pin"):
+        pin = str(settings.get(key, "") or "")
+        if pin and not (pin.isdigit() and 4 <= len(pin) <= 8):
+            problems.append(f"{key}: 4–8 digits, or blank to disable")
     return problems
 
 

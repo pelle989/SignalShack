@@ -1,0 +1,11 @@
+{% if problems %}
+  {% for p in problems %}<div class="error">{{ p }}</div>{% endfor %}
+{% elif fired %}
+  <div class="ok">Would fire right now:</div>
+  <div style="font-size:16px;margin:6px 0"><b>{{ fired.message }}</b></div>
+  <div class="dim">Current values: {% for k, v in used.items() %}{{ k }} = {{ v }}{{ ", " if not loop.last }}{% endfor %}</div>
+{% else %}
+  <div class="warn">Would not fire right now.</div>
+  <div class="dim">Current values: {% for k, v in used.items() %}{{ k }} = {{ v }}{{ ", " if not loop.last }}{% endfor %}</div>
+  {% if windowed %}<div class="dim">Note: this rule has a time window — it may simply be outside it right now.</div>{% endif %}
+{% endif %}

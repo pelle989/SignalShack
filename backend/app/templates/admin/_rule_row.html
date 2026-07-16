@@ -1,0 +1,14 @@
+<div class="row" style="gap:8px;align-items:stretch">
+  <select name="cfield" style="flex:2">
+    <option value="">— pick a field —</option>
+    {% for f in fields %}
+    <option value="{{ f.name }}" {% if cond.field == f.name %}selected{% endif %}>{{ f.label }}</option>
+    {% endfor %}
+  </select>
+  <select name="cop" style="flex:0 0 90px">
+    {% for op in ops %}
+    <option value="{{ op }}" {% if cond.op == op %}selected{% endif %}>{{ op }}</option>
+    {% endfor %}
+  </select>
+  <input type="text" name="cvalue" value="{{ cond.value }}" placeholder="value" style="flex:1">
+</div>

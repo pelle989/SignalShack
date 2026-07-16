@@ -1,5 +1,24 @@
 {% extends "admin/base.html" %}
 {% block content %}
+<h2>Your rules <a href="/admin/rules/new" style="float:right;font-size:12px;color:var(--green)">+ New rule</a></h2>
+<div class="card">
+  {% for r in user_rules %}
+  <div class="row">
+    <span>{{ r.name }} <span class="dim">— {{ r.output_text }}</span></span>
+    <span>
+      <a href="/admin/rules/user/{{ r.id }}/edit"><button type="button" class="quiet">Edit</button></a>
+      <form class="inline" method="post" action="/admin/rules/user/{{ r.id }}/toggle">
+        <input type="hidden" name="csrf" value="{{ csrf }}">
+        <button class="quiet">{{ 'On' if r.enabled else 'Off' }}</button>
+      </form>
+      <form class="inline" method="post" action="/admin/rules/user/{{ r.id }}/delete">
+        <input type="hidden" name="csrf" value="{{ csrf }}">
+        <button class="quiet">Delete</button>
+      </form>
+    </span>
+  </div>
+  {% else %}<div class="dim">None yet — build one with + New rule.</div>{% endfor %}
+</div>
 {% for band, rules in bands.items() %}
 <h2>{{ band }}</h2>
 <div class="card">

@@ -70,6 +70,27 @@ def check_csrf(session: dict, form_token: str | None) -> bool:
                                                        form_token or "")
 
 
+# ---- display unlock cookie (optional display PIN, plan V1.1)
+
+DISPLAY_COOKIE = "ss_display"
+
+
+def make_display_cookie() -> str:
+    return URLSafeTimedSerializer(app_secret(), salt="ss-display").dumps({"ok": True})
+
+
+def display_unlocked(request: Request) -> bool:
+    raw = request.cookies.get(DISPLAY_COOKIE)
+    if not raw:
+        return False
+    try:
+        URLSafeTimedSerializer(app_secret(), salt="ss-display").loads(
+            raw, max_age=365 * 24 * 3600)      # a TV unlocks once a year at most
+        return True
+    except BadSignature:
+        return False
+
+
 def host_allowed(request: Request, extra: str | None = None) -> bool:
     host = (request.headers.get("host") or "").split(":")[0].lower()
     if host.startswith(_ALLOWED_HOST_PREFIXES):

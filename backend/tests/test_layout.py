@@ -15,7 +15,7 @@ def test_default_layout_and_availability_filter(tmp_path, monkeypatch):
     store_weather(conn, date(2026, 7, 15), fetched_at=now)
     ctx = compose_board(conn, now=now)
     # no monitors, no AirNow key: transit and air filtered out of the order
-    assert ctx["layout"] == ["weather", "alerts", "announcements"]
+    assert ctx["layout"] == ["weather", "alerts", "announcements", "tomorrow"]
 
 
 def test_configured_cards_join_the_order(tmp_path, monkeypatch):
@@ -30,7 +30,8 @@ def test_configured_cards_join_the_order(tmp_path, monkeypatch):
     snapshots.save(conn, 1, "mta", MTA_FIXTURE, now=now)
     secrets.store(conn, "airnow", "k")
     ctx = compose_board(conn, now=now)
-    assert ctx["layout"] == ["weather", "alerts", "transit", "air", "announcements"]
+    assert ctx["layout"] == ["weather", "alerts", "transit", "air",
+                             "announcements", "tomorrow"]
 
 
 def test_move_and_toggle_change_composition(tmp_path, monkeypatch):
@@ -47,7 +48,8 @@ def test_move_and_toggle_change_composition(tmp_path, monkeypatch):
     assert "announcements" not in ctx["layout"]
     layout.toggle(conn, "announcements")         # back on, position preserved
     ctx = compose_board(conn, now=now)
-    assert ctx["layout"][-1] == "announcements"
+    assert "announcements" in ctx["layout"]
+    assert ctx["layout"].index("announcements") > ctx["layout"].index("weather")
 
 
 def test_layout_survives_legacy_preset_json(tmp_path, monkeypatch):

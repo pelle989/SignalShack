@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Post to the board</title>
+<style>
+  body{background:#0d1117;color:#e8edf4;font-family:-apple-system,"Segoe UI",Roboto,sans-serif;
+       max-width:480px;margin:0 auto;padding:24px 16px}
+  .card{background:#161d27;border:1px solid #1f2937;border-radius:14px;padding:20px}
+  label{display:block;font-size:13px;color:#8b98a9;margin:12px 0 4px}
+  input[type=text],input[type=password]{width:100%;padding:12px;border-radius:8px;
+    border:1px solid #1f2937;background:#0d1117;color:#e8edf4;font-size:16px;box-sizing:border-box}
+  button{background:#3fb96b;color:#08120b;border:0;border-radius:8px;padding:12px 24px;
+         font-size:16px;font-weight:600;margin-top:14px;cursor:pointer;width:100%}
+  .error{color:#e05d5d;margin-top:8px}
+  .ok{color:#3fb96b;margin-top:8px}
+  .dim{color:#5c6878;font-size:13px}
+</style></head>
+<body>
+  <h2 style="font-size:18px">Post to the board</h2>
+  <div class="card">
+    {% if not enabled %}
+      <p class="dim">This page is off. An admin can enable it by setting an
+      announce PIN in Settings.</p>
+    {% else %}
+      {% if posted %}<p class="ok">Posted — it'll be on the display within about
+      30 seconds. Expires in 12 hours.</p>{% endif %}
+      {% if error %}<p class="error">{{ error }}</p>{% endif %}
+      <form method="post" action="/announce">
+        <label>Message</label>
+        <input type="text" name="text" maxlength="200" autofocus>
+        <label><input type="checkbox" name="priority" value="1"> Priority</label>
+        <label>PIN</label>
+        <input type="password" name="pin" inputmode="numeric">
+        <button type="submit">Post it</button>
+      </form>
+    {% endif %}
+  </div>
+</body></html>
