@@ -43,6 +43,17 @@ def test_validation_enforces_voice_and_fields():
     assert rule["conditions"] == [{"field": "temp_evening", "op": ">=", "value": 78}]
 
 
+def test_lowercase_start_is_fixed_not_rejected():
+    rule, problems = user_rules.validate_and_build(
+        dict(GOOD_FORM, output="pool weather tonight."))
+    assert problems == []
+    assert rule["output"].startswith("Pool")
+    # placeholder-start messages pass untouched
+    rule, problems = user_rules.validate_and_build(
+        dict(GOOD_FORM, output="{high_today:.0f}° day — pool after dinner."))
+    assert problems == []
+
+
 def test_value_parsing_types():
     form = dict(GOOD_FORM, cfield=["raining_now", "low_tonight"],
                 cop=["==", "between"], cvalue=["true", "[55, 70]"])

@@ -31,9 +31,9 @@ FIXTURE = {"feeds": {
 
 def test_normalize_classifies_and_rolls_up_rail():
     out = MTAAdapter().normalize(FIXTURE)
-    assert out["lines"]["F"]["status"] == "delays"
-    assert out["lines"]["A"]["status"] == "planned_work"
-    assert out["lines"]["LIRR"]["status"] == "service_change"   # feed-level rollup
+    assert line_view("F", out)["status"] == "delays"
+    assert line_view("A", out)["status"] == "planned_work"
+    assert line_view("LIRR", out)["status"] == "service_change"  # feed rollup
 
 
 def test_line_view_states_and_attention():
@@ -44,7 +44,7 @@ def test_line_view_states_and_attention():
     q = line_view("Q", norm)                    # not in any alert => good service
     assert q["status"] == "good" and q["attention"] is None and q["dark_text"]
     lirr = line_view("LIRR", norm)
-    assert lirr["attention"] == "amber" and "8:02" in norm["lines"]["LIRR"]["headline"]
+    assert lirr["attention"] == "amber" and "8:02" in lirr["headline"]
 
 
 def _monitor(conn, line):

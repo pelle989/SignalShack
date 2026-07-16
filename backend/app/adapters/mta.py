@@ -92,15 +92,14 @@ class MTAAdapter(Adapter):
         return out
 
     def normalize(self, raw: dict) -> dict:
-        """-> {line_id: {status, headline}} for every line mentioned in any
-        active alert. Lines absent from the map are in good service."""
-        lines: dict[str, dict] = {}
+        """-> {"alerts": {line_id: [{status, headline, stops}]}}. Each entry
+        keeps its informed stop ids (parent form) so segment scoping can
+        filter; stops == [] means line-wide."""
+        from app.transit.gtfs import parent
+        per_line: dict[str, list[dict]] = {}
 
-        def worst(key, status, headline):
-            current = lines.get(key)
-            if current is None or (STATUS_RANK.index(status)
-                                   < STATUS_RANK.index(current["status"])):
-                lines[key] = {"status": status, "headline": headline[:140]}
+        def add(key, entry):
+            per_line.setdefault(key, []).append(entry)
 
         for feed_name, feed in raw.get("feeds", {}).items():
             for entity in feed.get("entity", []):
@@ -111,26 +110,40 @@ class MTAAdapter(Adapter):
                 translations = (alert.get("header_text") or {}).get("translation", [])
                 if translations:
                     headline = translations[0].get("text", "")
+                routes, stops = set(), []
                 for informed in alert.get("informed_entity", []):
-                    route = informed.get("route_id")
-                    if route:
-                        worst(route, status, headline)
+                    if informed.get("route_id"):
+                        routes.add(informed["route_id"])
+                    if informed.get("stop_id"):
+                        stops.append(parent(informed["stop_id"]))
+                entry = {"status": status, "headline": headline[:140],
+                         "stops": sorted(set(stops))}
+                for route in routes:
+                    add(route, entry)
                 # rail branches roll up to a feed-level pseudo-line for C1
                 if feed_name == "lirr":
-                    worst("LIRR", status, headline)
+                    add("LIRR", entry)
                 elif feed_name == "mnr":
-                    worst("MNR", status, headline)
-        return {"lines": lines, "errors": raw.get("errors", [])}
+                    add("MNR", entry)
+        return {"alerts": per_line, "errors": raw.get("errors", [])}
 
 
-def line_view(line_id: str, normalized: dict) -> dict:
-    """Card-ready view for one monitored line."""
-    info = normalized.get("lines", {}).get(line_id)
-    status = info["status"] if info else "good"
+def line_view(line_id: str, normalized: dict,
+              segment: set[str] | None = None) -> dict:
+    """Card-ready view for one monitored line. segment: parent stop ids the
+    household rides — alerts scoped entirely OUTSIDE it are suppressed;
+    line-wide alerts (no stop ids) always count."""
+    entries = normalized.get("alerts", {}).get(line_id, [])
+    relevant = [e for e in entries
+                if not e["stops"] or segment is None
+                or set(e["stops"]) & segment]
+    worst = min(relevant, key=lambda e: STATUS_RANK.index(e["status"]),
+                default=None)
+    status = worst["status"] if worst else "good"
     return {
         "line": line_id,
         "status": status,
-        "headline": info["headline"] if info else "",
+        "headline": worst["headline"] if worst else "",
         "color": LINE_COLORS.get(line_id, "#5c6878"),
         "dark_text": line_id in DARK_TEXT,
         "label": {"good": "✓ Good service", "delays": "Delays",

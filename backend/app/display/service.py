@@ -131,12 +131,14 @@ def compose_board(conn: sqlite3.Connection, now: datetime | None = None) -> dict
     else:
         ctx["primary_msg"] = "Weather unavailable — waiting for first fetch."
 
-    # ---- transit line cards (C1): one card instance per monitored line
+    # ---- transit line cards (C1 + segment scoping): one card per monitor
     monitors = conn.execute(
-        "SELECT field FROM monitor WHERE adapter='mta' ORDER BY id").fetchall()
+        "SELECT field, config_json FROM monitor WHERE adapter='mta'"
+        " ORDER BY id").fetchall()
     ctx["transit"] = []
     ctx["stamp_transit"] = None
     if monitors:
+        from app.transit import gtfs
         mta_snap = snapshots.latest(conn, loc["id"], "mta")
         t_state = snapshots.freshness(mta_snap and mta_snap["fetched_at"],
                                       MTAAdapter.manifest.poll_seconds_fresh,
@@ -145,8 +147,16 @@ def compose_board(conn: sqlite3.Connection, now: datetime | None = None) -> dict
                                                t_state)
         normalized = MTAAdapter().normalize(mta_snap["payload"]) if mta_snap else {}
         for m in monitors:
-            view = line_view(m["field"], normalized)
+            seg_cfg = json.loads(m["config_json"] or "{}")
+            segment = None
+            if seg_cfg.get("from_id") and seg_cfg.get("to_id"):
+                segment = gtfs.segment_ids(m["field"], seg_cfg["from_id"],
+                                           seg_cfg["to_id"])
+            view = line_view(m["field"], normalized, segment=segment)
             view["state"] = t_state
+            view["segment_label"] = (
+                f"{seg_cfg.get('from_name', '')} → {seg_cfg.get('to_name', '')}"
+                if segment else "")
             if t_state == "unavailable":     # honest state: never claim good service
                 view["label"] = "Status unknown"
                 view["attention"] = None

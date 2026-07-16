@@ -1,5 +1,6 @@
 {% extends "admin/base.html" %}
 {% block content %}
+{% if msg %}<div class="card ok">{{ msg }}</div>{% endif %}
 <h2>Watch a line</h2>
 <div class="card">
   <p class="dim">Each watched line gets its own card on the display, showing
@@ -20,16 +21,58 @@
     <button type="submit">Add to board</button>
   </form>
 </div>
+
 <h2>Watched lines</h2>
 <div class="card">
   {% for m in monitors %}
-  <div class="row">
-    <span><b>{{ m.field }}</b></span>
-    <form class="inline" method="post" action="/admin/transit/{{ m.id }}/delete">
+  <div style="padding:10px 0;border-bottom:1px solid var(--edge)">
+    <div class="row" style="border:0;padding:0">
+      <span><b>{{ m.field }}</b>
+        {% if m.cfg.from_name %}<span class="dim">· {{ m.cfg.from_name }} → {{ m.cfg.to_name }}</span>{% endif %}
+      </span>
+      <form class="inline" method="post" action="/admin/transit/{{ m.id }}/delete">
+        <input type="hidden" name="csrf" value="{{ csrf }}">
+        <button class="quiet" type="submit">Remove</button>
+      </form>
+    </div>
+    {% if m.is_subway and m.stops %}
+    <form method="post" action="/admin/transit/{{ m.id }}/segment"
+          style="display:flex;gap:8px;margin-top:8px;align-items:center">
       <input type="hidden" name="csrf" value="{{ csrf }}">
-      <button class="quiet" type="submit">Remove</button>
+      <select name="from_stop" style="flex:1">
+        <option value="">— whole line —</option>
+        {% for s in m.stops %}
+        <option value="{{ s.id }}" {% if m.cfg.from_id == s.id %}selected{% endif %}>{{ s.name }}</option>
+        {% endfor %}
+      </select>
+      <span class="dim">→</span>
+      <select name="to_stop" style="flex:1">
+        <option value="">— whole line —</option>
+        {% for s in m.stops %}
+        <option value="{{ s.id }}" {% if m.cfg.to_id == s.id %}selected{% endif %}>{{ s.name }}</option>
+        {% endfor %}
+      </select>
+      <button class="quiet" type="submit">Save</button>
     </form>
+    <p class="dim" style="margin-top:4px">Only alerts touching your stretch show
+    (line-wide delays always show). Leave both blank to watch the whole line.</p>
+    {% elif m.is_subway %}
+    <p class="dim" style="margin-top:4px">Download stop data below to limit this
+    line to the stretch you ride.</p>
+    {% endif %}
   </div>
   {% else %}<div class="dim">None yet — add your first line above.</div>{% endfor %}
 </div>
+
+{% if not has_dataset %}
+<h2>Stop data</h2>
+<div class="card">
+  <p class="dim">One-time download from the MTA (~40 MB, a minute or two).
+  Enables between-stops monitoring, and powers route features later.</p>
+  <form method="post" action="/admin/transit/gtfs">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <button type="submit">Download stop data</button>
+  </form>
+</div>
+{% endif %}
 {% endblock %}

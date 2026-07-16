@@ -81,8 +81,8 @@ def validate_and_build(form: dict) -> tuple[dict | None, list[str]]:
         problems.append("Message: no exclamation points (voice guide).")
     if _EMOJI.search(output):
         problems.append("Message: no emoji (voice guide).")
-    if output and not (output[0].isupper() or output[0].isdigit()):
-        problems.append("Message: start with a capital letter.")
+    if output and output[0].islower():
+        output = output[0].upper() + output[1:]   # sentence case: fix, don't nag
 
     band = form.get("band") or "plan"
     if band not in BANDS:

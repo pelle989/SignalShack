@@ -548,16 +548,81 @@ RAIL_LINES = ["LIRR", "MNR"]
 
 
 @router.get("/transit", response_class=HTMLResponse)
-async def transit_page(request: Request):
+async def transit_page(request: Request, msg: str = ""):
+    from app.transit import gtfs
     conn = db.connect()
     try:
         guard = _guard(request, conn)
         if isinstance(guard, RedirectResponse):
             return guard
-        monitors = conn.execute(
-            "SELECT id, field FROM monitor WHERE adapter='mta' ORDER BY id").fetchall()
+        rows = conn.execute(
+            "SELECT id, field, config_json FROM monitor WHERE adapter='mta'"
+            " ORDER BY id").fetchall()
+        dataset = gtfs.load()
+        monitors = []
+        for r in rows:
+            cfg = json.loads(r["config_json"] or "{}")
+            monitors.append({
+                "id": r["id"], "field": r["field"], "cfg": cfg,
+                "stops": gtfs.stops_for(r["field"]) if dataset else [],
+                "is_subway": r["field"] in SUBWAY_LINES})
         return _render(request, "transit.html", guard, monitors=monitors,
-                       subway=SUBWAY_LINES, rail=RAIL_LINES)
+                       subway=SUBWAY_LINES, rail=RAIL_LINES,
+                       has_dataset=dataset is not None, msg=msg)
+    finally:
+        conn.close()
+
+
+@router.post("/transit/gtfs")
+async def transit_gtfs_download(request: Request, csrf: str = Form(None)):
+    """Download + process MTA stop data (one-time, ~1–2 min on the box)."""
+    import asyncio
+
+    from app.transit import gtfs
+    conn = db.connect()
+    try:
+        guard = _guard(request, conn)
+        if isinstance(guard, RedirectResponse):
+            return guard
+        if not security.check_csrf(guard, csrf):
+            return RedirectResponse("/admin/transit", status_code=303)
+    finally:
+        conn.close()
+    try:
+        summary = await asyncio.to_thread(gtfs.build_dataset)
+        msg = f"Stop data ready — {summary['routes']} routes, {summary['stops']} stops."
+    except Exception as exc:  # noqa: BLE001 — report, don't crash admin
+        msg = f"Download failed ({type(exc).__name__}) — try again."
+    return RedirectResponse(f"/admin/transit?msg={msg}", status_code=303)
+
+
+@router.post("/transit/{monitor_id}/segment")
+async def transit_segment(request: Request, monitor_id: int,
+                          from_stop: str = Form(""), to_stop: str = Form(""),
+                          csrf: str = Form(None)):
+    from app.transit import gtfs
+    conn = db.connect()
+    try:
+        guard = _guard(request, conn)
+        if isinstance(guard, RedirectResponse):
+            return guard
+        row = conn.execute("SELECT field FROM monitor WHERE id=? AND adapter='mta'",
+                           (monitor_id,)).fetchone()
+        if security.check_csrf(guard, csrf) and row:
+            if not from_stop or not to_stop:            # clear the segment
+                with conn:
+                    conn.execute("UPDATE monitor SET config_json=NULL WHERE id=?",
+                                 (monitor_id,))
+            else:
+                names = {s["id"]: s["name"] for s in gtfs.stops_for(row["field"])}
+                if from_stop in names and to_stop in names and from_stop != to_stop:
+                    cfg = json.dumps({
+                        "from_id": from_stop, "to_id": to_stop,
+                        "from_name": names[from_stop], "to_name": names[to_stop]})
+                    with conn:
+                        conn.execute("UPDATE monitor SET config_json=? WHERE id=?",
+                                     (cfg, monitor_id))
+        return RedirectResponse("/admin/transit", status_code=303)
     finally:
         conn.close()
 
