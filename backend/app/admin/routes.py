@@ -566,8 +566,13 @@ async def transit_page(request: Request, msg: str = ""):
                 "id": r["id"], "field": r["field"], "cfg": cfg,
                 "stops": gtfs.stops_for(r["field"]) if dataset else [],
                 "is_subway": r["field"] in SUBWAY_LINES})
+        routes_rows = conn.execute(
+            "SELECT id, name, legs_json FROM commute_profile WHERE mode='train'"
+            " ORDER BY id").fetchall()
+        routes = [{"id": r["id"], "name": r["name"],
+                   "legs": json.loads(r["legs_json"] or "[]")} for r in routes_rows]
         return _render(request, "transit.html", guard, monitors=monitors,
-                       subway=SUBWAY_LINES, rail=RAIL_LINES,
+                       subway=SUBWAY_LINES, rail=RAIL_LINES, routes=routes,
                        has_dataset=dataset is not None, msg=msg)
     finally:
         conn.close()
@@ -594,6 +599,69 @@ async def transit_gtfs_download(request: Request, csrf: str = Form(None)):
     except Exception as exc:  # noqa: BLE001 — report, don't crash admin
         msg = f"Download failed ({type(exc).__name__}) — try again."
     return RedirectResponse(f"/admin/transit?msg={msg}", status_code=303)
+
+
+@router.get("/transit/leg-row", response_class=HTMLResponse)
+async def transit_leg_row(request: Request):
+    return _render(request, "_leg_row.html", None, subway=SUBWAY_LINES)
+
+
+@router.get("/transit/leg-stops", response_class=HTMLResponse)
+async def transit_leg_stops(request: Request, leg_line: str = ""):
+    """htmx: from/to selects for the chosen line (dependent dropdowns)."""
+    from app.transit import gtfs
+    stops = gtfs.stops_for(leg_line) if leg_line in SUBWAY_LINES else []
+    return _render(request, "_leg_stops.html", None, stops=stops)
+
+
+@router.post("/transit/route")
+async def transit_route_save(request: Request):
+    """Chained route: ordered legs, each line + from + to."""
+    from app.transit import gtfs
+    conn = db.connect()
+    try:
+        guard = _guard(request, conn)
+        if isinstance(guard, RedirectResponse):
+            return guard
+        form = await request.form()
+        if not security.check_csrf(guard, form.get("csrf")):
+            return RedirectResponse("/admin/transit", status_code=303)
+        name = (form.get("route_name") or "").strip()[:40] or "My route"
+        legs = []
+        for line, frm, to in zip(form.getlist("leg_line"), form.getlist("leg_from"),
+                                 form.getlist("leg_to"), strict=False):
+            if not (line in SUBWAY_LINES and frm and to and frm != to):
+                continue                                  # skip incomplete rows
+            names = {s["id"]: s["name"] for s in gtfs.stops_for(line)}
+            if frm in names and to in names:
+                legs.append({"line": line, "from_id": frm, "to_id": to,
+                             "from_name": names[frm], "to_name": names[to]})
+        if len(legs) >= 2:                                # a chain needs 2+ legs
+            with conn:
+                conn.execute(
+                    "INSERT INTO commute_profile (name, mode, legs_json,"
+                    " actively_monitored) VALUES (?, 'train', ?, 1)",
+                    (name, json.dumps(legs)))
+        return RedirectResponse("/admin/transit", status_code=303)
+    finally:
+        conn.close()
+
+
+@router.post("/transit/route/{route_id}/delete")
+async def transit_route_delete(request: Request, route_id: int,
+                               csrf: str = Form(None)):
+    conn = db.connect()
+    try:
+        guard = _guard(request, conn)
+        if isinstance(guard, RedirectResponse):
+            return guard
+        if security.check_csrf(guard, csrf):
+            with conn:
+                conn.execute("DELETE FROM commute_profile WHERE id=? AND mode='train'",
+                             (route_id,))
+        return RedirectResponse("/admin/transit", status_code=303)
+    finally:
+        conn.close()
 
 
 @router.post("/transit/{monitor_id}/segment")
@@ -636,13 +704,12 @@ async def transit_add(request: Request, line: str = Form(...),
         if isinstance(guard, RedirectResponse):
             return guard
         if security.check_csrf(guard, csrf) and line in SUBWAY_LINES + RAIL_LINES:
-            exists = conn.execute("SELECT 1 FROM monitor WHERE adapter='mta'"
-                                  " AND field=?", (line,)).fetchone()
-            if not exists:
-                with conn:
-                    conn.execute("INSERT INTO monitor (adapter, field, created_at)"
-                                 " VALUES ('mta', ?, ?)",
-                                 (line, datetime.now().isoformat(timespec="seconds")))
+            # duplicates allowed by design: two R monitors with different
+            # segments are two different commutes
+            with conn:
+                conn.execute("INSERT INTO monitor (adapter, field, created_at)"
+                             " VALUES ('mta', ?, ?)",
+                             (line, datetime.now().isoformat(timespec="seconds")))
         return RedirectResponse("/admin/transit", status_code=303)
     finally:
         conn.close()

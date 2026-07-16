@@ -64,6 +64,48 @@
   {% else %}<div class="dim">None yet — add your first line above.</div>{% endfor %}
 </div>
 
+<h2>Chained routes</h2>
+<div class="card">
+  {% for r in routes %}
+  <div class="row">
+    <span><b>{{ r.name }}</b> <span class="dim">·
+      {% for leg in r.legs %}{{ leg.line }} {{ leg.from_name }} → {{ leg.to_name }}{{ ", then " if not loop.last }}{% endfor %}</span></span>
+    <form class="inline" method="post" action="/admin/transit/route/{{ r.id }}/delete">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      <button class="quiet" type="submit">Remove</button>
+    </form>
+  </div>
+  {% else %}<div class="dim">None yet.</div>{% endfor %}
+
+  {% if has_dataset %}
+  <form method="post" action="/admin/transit/route" style="margin-top:12px">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <label>Route name</label>
+    <input type="text" name="route_name" maxlength="40" placeholder="Work commute">
+    <div id="legs">
+      <div class="row" style="gap:8px;border:0">
+        <select name="leg_line" style="flex:0 0 80px"
+                hx-get="/admin/transit/leg-stops" hx-include="this"
+                hx-target="next .leg-stops" hx-trigger="change">
+          <option value="">line</option>
+          {% for l in subway %}<option value="{{ l }}">{{ l }}</option>{% endfor %}
+        </select>
+        <span class="leg-stops" style="display:flex;gap:8px;flex:1"></span>
+      </div>
+    </div>
+    <button type="button" class="quiet" hx-get="/admin/transit/leg-row"
+            hx-target="#legs" hx-swap="beforeend">+ leg</button>
+    <button type="submit">Save route</button>
+    <p class="dim" style="margin-top:6px">Two or more legs — e.g. R from 25 St to
+    Atlantic Av, then D to 34 St. The board shows one card with each leg's
+    status and an overall verdict.</p>
+  </form>
+  {% else %}
+  <p class="dim">Download stop data below to build chained routes.</p>
+  {% endif %}
+</div>
+<script src="/static/htmx.min.js"></script>
+
 {% if not has_dataset %}
 <h2>Stop data</h2>
 <div class="card">

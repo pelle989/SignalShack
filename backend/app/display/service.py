@@ -54,8 +54,8 @@ def compose_board(conn: sqlite3.Connection, now: datetime | None = None) -> dict
     ctx = {"stamp_weather": "unavailable", "stamp_alerts": "unavailable",
            "primary_msg": None, "secondary_msgs": [], "weather_state": "unavailable",
            "alerts_state": "unknown", "alerts": [], "alerts_attention": None,
-           "announcements": [], "transit": [], "stamp_transit": None,
-           "air": None, "tomorrow": None,
+           "announcements": [], "transit": [], "transit_routes": [],
+           "stamp_transit": None, "air": None, "tomorrow": None,
            "location_label": loc["label"] if loc else "Home"}
 
     if loc is None:
@@ -161,6 +161,43 @@ def compose_board(conn: sqlite3.Connection, now: datetime | None = None) -> dict
                 view["label"] = "Status unknown"
                 view["attention"] = None
             ctx["transit"].append(view)
+
+    # ---- chained routes (C2 legs): one combined card per route
+    ctx["transit_routes"] = []
+    route_rows = conn.execute(
+        "SELECT name, legs_json FROM commute_profile WHERE mode='train'"
+        " AND actively_monitored=1 ORDER BY id").fetchall()
+    if route_rows:
+        from app.adapters.mta import STATUS_RANK
+        from app.transit import gtfs
+        mta_snap = snapshots.latest(conn, loc["id"], "mta")
+        t_state = snapshots.freshness(mta_snap and mta_snap["fetched_at"],
+                                      MTAAdapter.manifest.poll_seconds_fresh,
+                                      MTAAdapter.manifest.stale_after_seconds, now)
+        ctx["stamp_transit"] = ctx["stamp_transit"] or snapshots.stamp(
+            mta_snap and mta_snap["fetched_at"], t_state)
+        normalized = MTAAdapter().normalize(mta_snap["payload"]) if mta_snap else {}
+        for r in route_rows:
+            legs = []
+            for leg in json.loads(r["legs_json"] or "[]"):
+                segment = gtfs.segment_ids(leg["line"], leg["from_id"], leg["to_id"])
+                v = line_view(leg["line"], normalized, segment=segment)
+                v["from_name"], v["to_name"] = leg["from_name"], leg["to_name"]
+                legs.append(v)
+            worst = min((leg["status"] for leg in legs),
+                        key=STATUS_RANK.index, default="good")
+            route = {"name": r["name"], "legs": legs, "state": t_state,
+                     "status": worst,
+                     "label": {"good": "✓ All clear", "delays": "Delays en route",
+                               "service_change": "Service change en route",
+                               "planned_work": "Planned work en route",
+                               "suspended": "Leg suspended"}[worst],
+                     "attention": {"good": None, "planned_work": None,
+                                   "delays": "amber", "service_change": "amber",
+                                   "suspended": "red"}[worst]}
+            if t_state == "unavailable":
+                route["label"], route["attention"] = "Status unknown", None
+            ctx["transit_routes"].append(route)
 
     # ---- air quality card (V1.1): appears once an AirNow key is stored
     ctx["air"] = None

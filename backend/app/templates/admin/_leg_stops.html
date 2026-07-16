@@ -1,0 +1,8 @@
+<select name="leg_from" style="flex:1">
+  <option value="">— board at —</option>
+  {% for s in stops %}<option value="{{ s.id }}">{{ s.name }}</option>{% endfor %}
+</select>
+<select name="leg_to" style="flex:1">
+  <option value="">— exit at —</option>
+  {% for s in stops %}<option value="{{ s.id }}">{{ s.name }}</option>{% endfor %}
+</select>

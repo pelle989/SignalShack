@@ -64,7 +64,8 @@ def visible_order(conn: sqlite3.Connection, ctx: dict) -> list[str]:
     for c in get_layout(conn):
         if not c["enabled"]:
             continue
-        if c["type"] == "transit" and not ctx.get("transit"):
+        if c["type"] == "transit" and not (ctx.get("transit")
+                                           or ctx.get("transit_routes")):
             continue
         if c["type"] == "air" and ctx.get("air") is None:
             continue

@@ -77,7 +77,11 @@ async def refresh_if_stale(loc_id: int) -> None:
 def _active_adapters(conn) -> tuple:
     """Keyed/optional adapters poll only when the household enabled them."""
     adapters = [OpenMeteoAdapter(), NWSAdapter()]
-    if conn.execute("SELECT 1 FROM monitor WHERE adapter='mta' LIMIT 1").fetchone():
+    mta_wanted = (
+        conn.execute("SELECT 1 FROM monitor WHERE adapter='mta' LIMIT 1").fetchone()
+        or conn.execute("SELECT 1 FROM commute_profile WHERE mode='train'"
+                        " AND actively_monitored=1 LIMIT 1").fetchone())
+    if mta_wanted:
         adapters.append(MTAAdapter())
     key = secrets.retrieve(conn, "airnow") if secrets.exists(conn, "airnow") else None
     if key:

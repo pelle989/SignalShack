@@ -46,6 +46,24 @@
 </div>
 {% endfor %}
 
+{% for r in transit_routes %}
+<div class="card{% if primary and loop.first and not transit %} primary{% endif %}{% if r.attention == 'red' %} attn-red{% elif r.attention == 'amber' %} attn-amber{% endif %}">
+  <h2>{{ r.name }}</h2>
+  <div class="line-status {{ 'ok' if r.status == 'good' else 'late' if r.attention == 'amber' else 'bad' if r.attention == 'red' else 'dim' }}">{{ r.label }}</div>
+  <div class="legs" style="margin-top:.8vh">
+    {% for leg in r.legs %}
+    <div style="display:flex;align-items:center;gap:.6vw;font-size:2vh;color:var(--dim);margin-bottom:.7vh">
+      <span class="bullet" style="background:{{ leg.color }};{% if leg.dark_text %}color:#111{% endif %};width:2.8vh;height:2.8vh;font-size:1.8vh">{{ leg.line }}</span>
+      {{ leg.from_name }} → {{ leg.to_name }} ·
+      <span class="{{ 'ok' if leg.status == 'good' else 'warn' }}" style="{% if leg.status == 'good' %}color:var(--green){% elif leg.attention == 'red' %}color:var(--red){% elif leg.attention == 'amber' %}color:var(--amber){% endif %};font-weight:600">{{ leg.label }}</span>
+    </div>
+    {% endfor %}
+  </div>
+  {% if r.state == 'stale' %}<div class="empty warn">Status may be outdated.</div>{% endif %}
+  <div class="stamp">MTA · {{ stamp_transit }}</div>
+</div>
+{% endfor %}
+
 {% elif card == 'air' %}
 <div class="card{% if primary %} primary{% endif %}{% if air.aqi and air.aqi > 100 %} attn-amber{% endif %}">
   <h2>Air quality</h2>

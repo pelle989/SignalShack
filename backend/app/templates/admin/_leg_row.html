@@ -1,0 +1,9 @@
+<div class="row" style="gap:8px;border:0">
+  <select name="leg_line" style="flex:0 0 80px"
+          hx-get="/admin/transit/leg-stops" hx-include="this"
+          hx-target="next .leg-stops" hx-trigger="change">
+    <option value="">line</option>
+    {% for l in subway %}<option value="{{ l }}">{{ l }}</option>{% endfor %}
+  </select>
+  <span class="leg-stops" style="display:flex;gap:8px;flex:1"></span>
+</div>
