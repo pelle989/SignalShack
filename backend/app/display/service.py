@@ -123,7 +123,8 @@ def compose_board(conn: sqlite3.Connection, now: datetime | None = None) -> dict
                 ctx["tomorrow"] = None
             ctx["forecast"] = _forecast_grid(om_snap["payload"]["hourly"],
                                              today, now.hour)
-            ctx["outlook"] = _outlook(om_snap["payload"]["daily"], today)
+            ctx["outlook"] = _outlook(om_snap["payload"]["daily"], today,
+                                      om_snap["payload"]["hourly"])
             _fire_caps(conn, [f.rule_id for f in fired
                               if any(s.get("max_fires_per_7d") and s["id"] == f.rule_id
                                      for s in SEEDS)], today)
@@ -358,6 +359,7 @@ def compose_board(conn: sqlite3.Connection, now: datetime | None = None) -> dict
 
     ctx["layout"] = layout.visible_order(conn, ctx)
     ctx["density"] = layout.get_density(conn)
+    ctx["forecast_style"] = layout.get_forecast_style(conn)
     ctx["pip"] = _pip(ctx)
     return ctx
 
@@ -411,9 +413,11 @@ _DIR_ARROWS = {"N": "↓", "NE": "↙", "E": "←", "SE": "↖",
 
 
 def _forecast_chart(hours: list[dict]) -> dict | None:
-    """Render-ready SVG geometry for the trailsnh-style timeline (480×84
-    viewBox: temp curve, precip bars, cloud shading, hour labels; wind rows)."""
-    xs = [8 + i * 40 for i in range(len(hours))]
+    """Render-ready SVG geometry, trailsnh conventions (480×100 viewBox):
+    hour labels on TOP, gray cloud-ceiling area hanging from them, temp curve
+    with point dots + value labels, blue precip bars with % labels; wind rows
+    in a second strip."""
+    xs = [8 + i * 40 for i in range(len(hours))]     # slot origin; center +8
     temps = [h["temp"] for h in hours]
     known = [t for t in temps if t is not None]
     if not known:
@@ -421,24 +425,35 @@ def _forecast_chart(hours: list[dict]) -> dict | None:
     lo_v, hi_v = min(known), max(known)
     span = (hi_v - lo_v) or 1
 
-    def ty(t):
-        return round(60 - (t - lo_v) / span * 44, 1)
+    def ty(t):        # temp band: y 42 (hottest) .. 74 (coldest)
+        return round(74 - (t - lo_v) / span * 32, 1)
+
+    # cloud ceiling: filled polygon hanging from y=14, depth = cloud %
+    ceiling = [f"{x + 8},{round(14 + (h['cloud'] or 0) * .16, 1)}"
+               for x, h in zip(xs, hours, strict=True)]
+    cloud_poly = f"8,14 {' '.join(ceiling)} {xs[-1] + 8},14"
 
     chart = {
+        "hours": [{"x": xs[i] + 8, "text": hours[i]["label"]}
+                  for i in range(0, len(hours), 2)],
+        "cloud_poly": cloud_poly,
         "temp_points": " ".join(f"{x + 8},{ty(t)}"
                                 for x, t in zip(xs, temps, strict=True)
                                 if t is not None),
-        "hi": {"x": xs[temps.index(hi_v)] + 8, "y": ty(hi_v),
-               "text": f"{hi_v:.0f}°"},
-        "lo": {"x": xs[temps.index(lo_v)] + 8, "y": ty(lo_v),
-               "text": f"{lo_v:.0f}°"},
-        "bars": [{"x": x, "y": round(70 - (h["pop"] or 0) * .48, 1),
-                  "h": round((h["pop"] or 0) * .48, 1)}
+        "dots": [{"x": x + 8, "y": ty(t)}
+                 for x, t in zip(xs, temps, strict=True) if t is not None],
+        "temp_labels": [{"x": xs[i] + 8, "y": ty(temps[i]) - 6,
+                         "text": f"{temps[i]:.0f}"}
+                        for i in range(0, len(hours), 2)
+                        if temps[i] is not None],
+        "bars": [{"x": x, "y": round(96 - (h["pop"] or 0) * .18, 1),
+                  "h": round((h["pop"] or 0) * .18, 1)}
                  for x, h in zip(xs, hours, strict=True)],
-        "cloud": [{"x": x - 4, "h": round((h["cloud"] or 0) * .08, 1)}
-                  for x, h in zip(xs, hours, strict=True)],
-        "hours": [{"x": xs[i], "text": hours[i]["label"]}
-                  for i in range(0, len(hours), 3)],
+        "pop_labels": [{"x": xs[i] + 8,
+                        "y": round(96 - (hours[i]["pop"] or 0) * .18, 1) - 2,
+                        "text": f"{hours[i]['pop']:.0f}"}
+                       for i in range(len(hours))
+                       if (hours[i]["pop"] or 0) >= 20],
         "winds": [], "dirs": [],
     }
     for i in range(1, len(hours), 2):
@@ -456,7 +471,47 @@ def _forecast_chart(hours: list[dict]) -> dict | None:
     return chart
 
 
-def _outlook(daily: dict, today_iso: str) -> dict | None:
+def _wmo_icon(code) -> str | None:
+    if code is None:
+        return None
+    if code <= 1:
+        return "sun"
+    if code == 2:
+        return "part"
+    if code == 3:
+        return "cloud"
+    if code in (45, 48):
+        return "fog"
+    if 71 <= code <= 77 or code in (85, 86):
+        return "snow"
+    if code >= 95:
+        return "storm"
+    return "rain"        # drizzle / rain / showers
+
+
+def _rain_when(hourly: dict, day_iso: str) -> str | None:
+    """AM / PM / all day, from the day's hourly rain chances."""
+    times = hourly.get("time") or []
+    pops = hourly.get("precipitation_probability") or []
+    am, pm = 0, 0
+    for i, t in enumerate(times):
+        if not t.startswith(day_iso) or i >= len(pops) or pops[i] is None:
+            continue
+        h = int(t[11:13])
+        if 6 <= h < 12:
+            am = max(am, pops[i])
+        elif 12 <= h <= 21:
+            pm = max(pm, pops[i])
+    if am >= 30 and pm >= 30:
+        return "all day"
+    if am >= 30:
+        return "AM"
+    if pm >= 30:
+        return "PM"
+    return None
+
+
+def _outlook(daily: dict, today_iso: str, hourly: dict | None = None) -> dict | None:
     """Tomorrow through day 7, honest about forecast decay: days 1-4 full,
     day 5 medium, 6-7 low confidence (accuracy note in the plan)."""
     try:
@@ -472,12 +527,15 @@ def _outlook(daily: dict, today_iso: str) -> dict | None:
     for i in range(start + 1, min(start + 8, len(daily["time"]))):
         ahead = i - start
         code = g("weather_code", i)
+        day_iso = daily["time"][i]
         days.append({
-            "label": date.fromisoformat(daily["time"][i]).strftime("%a"),
+            "label": date.fromisoformat(day_iso).strftime("%a"),
             "high": g("temperature_2m_max", i),
             "low": g("temperature_2m_min", i),
             "pop": g("precipitation_probability_max", i),
             "word": _WMO_WORDS.get(code) if code is not None else None,
+            "icon": _wmo_icon(code),
+            "rain_when": _rain_when(hourly, day_iso) if hourly else None,
             "conf": "high" if ahead <= 4 else "medium" if ahead == 5 else "low",
         })
     return {"days": days} if len(days) >= 2 else None   # 1 day = tomorrow strip's job

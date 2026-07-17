@@ -123,19 +123,31 @@
 <div class="card">
   <h2>Next 12 hours</h2>
   {% set c = forecast.chart %}
-  {% if c %}
-  <svg class="fxsvg" viewBox="0 0 480 84" preserveAspectRatio="none" aria-label="12-hour temperature, rain chance, cloud cover">
-    {# cloud shading: sky row along the top, deeper = cloudier #}
-    <g fill="#8b98a9" opacity=".18">{% for r in c.cloud %}<rect x="{{ r.x }}" y="2" width="36" height="{{ r.h }}"/>{% endfor %}</g>
-    <line x1="0" y1="70" x2="480" y2="70" stroke="#1f2937" stroke-width="1"/>
-    {# precip probability bars #}
-    <g fill="#5b9dd9" opacity=".3">{% for b in c.bars %}<rect x="{{ b.x }}" y="{{ b.y }}" width="16" height="{{ b.h }}"/>{% endfor %}</g>
-    {# temperature curve #}
-    <polyline points="{{ c.temp_points }}" fill="none" stroke="#e0a63d" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
-    <circle cx="{{ c.hi.x }}" cy="{{ c.hi.y }}" r="3.5" fill="#e0a63d"/>
-    <text x="{{ c.hi.x }}" y="{{ c.hi.y - 7 }}" text-anchor="middle" font-size="11" fill="#e8edf4" font-weight="600">{{ c.hi.text }}</text>
-    <text x="{{ c.lo.x }}" y="{{ c.lo.y + 13 }}" text-anchor="middle" font-size="11" fill="#8b98a9">{{ c.lo.text }}</text>
-    <g font-size="10" fill="#5c6878">{% for l in c.hours %}<text x="{{ l.x }}" y="82">{{ l.text }}</text>{% endfor %}</g>
+  {% if forecast_style == 'table' or not c %}
+  <table class="fx">
+    <tr class="fx-h"><td></td>{% for h in forecast.hours %}<td>{{ h.label }}</td>{% endfor %}</tr>
+    <tr class="fx-t"><td>Temp</td>{% for h in forecast.hours %}<td>{{ '%.0f'|format(h.temp) ~ '°' if h.temp is not none else '–' }}</td>{% endfor %}</tr>
+    <tr><td>Feels</td>{% for h in forecast.hours %}<td>{{ '%.0f'|format(h.feels) ~ '°' if h.feels is not none else '–' }}</td>{% endfor %}</tr>
+    <tr><td>Rain %</td>{% for h in forecast.hours %}<td{% if h['pop'] and h['pop'] >= 50 %} class="fx-wet"{% endif %}>{{ h['pop'] if h['pop'] is not none else '–' }}</td>{% endfor %}</tr>
+    <tr><td>Cloud %</td>{% for h in forecast.hours %}<td>{{ h.cloud if h.cloud is not none else '–' }}</td>{% endfor %}</tr>
+    <tr><td>Wind</td>{% for h in forecast.hours %}<td>{{ '%.0f'|format(h.wind) if h.wind is not none else '–' }}</td>{% endfor %}</tr>
+    <tr><td>Gusts</td>{% for h in forecast.hours %}<td{% if h.gust and h.gust >= 30 %} class="fx-wet"{% endif %}>{{ '%.0f'|format(h.gust) if h.gust is not none else '–' }}</td>{% endfor %}</tr>
+    <tr><td>Dir</td>{% for h in forecast.hours %}<td>{{ h.dir or '–' }}</td>{% endfor %}</tr>
+  </table>
+  {% else %}
+  <svg class="fxsvg" viewBox="0 0 480 100" preserveAspectRatio="none" aria-label="12-hour temperature, rain chance, cloud cover">
+    {# hour labels on top (trailsnh convention) #}
+    <g font-size="10" fill="#5c6878" text-anchor="middle">{% for l in c.hours %}<text x="{{ l.x }}" y="10">{{ l.text }}</text>{% endfor %}</g>
+    {# cloud ceiling hanging from the hour row — deeper = cloudier #}
+    <polygon points="{{ c.cloud_poly }}" fill="#8b98a9" opacity=".16"/>
+    {# precip bars from the baseline, % labels on wet hours #}
+    <line x1="0" y1="96" x2="480" y2="96" stroke="#1f2937" stroke-width="1"/>
+    <g fill="#5b9dd9" opacity=".35">{% for b in c.bars %}<rect x="{{ b.x }}" y="{{ b.y }}" width="16" height="{{ b.h }}"/>{% endfor %}</g>
+    <g font-size="9" fill="#5b9dd9" text-anchor="middle">{% for p in c.pop_labels %}<text x="{{ p.x }}" y="{{ p.y }}">{{ p.text }}</text>{% endfor %}</g>
+    {# temperature curve with point dots + value labels #}
+    <polyline points="{{ c.temp_points }}" fill="none" stroke="#e0a63d" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+    <g fill="#e0a63d">{% for d in c.dots %}<circle cx="{{ d.x }}" cy="{{ d.y }}" r="2.4"/>{% endfor %}</g>
+    <g font-size="10.5" fill="#e8edf4" font-weight="600" text-anchor="middle">{% for t in c.temp_labels %}<text x="{{ t.x }}" y="{{ t.y }}">{{ t.text }}</text>{% endfor %}</g>
   </svg>
   <svg class="fxsvg wind" viewBox="0 0 480 30" preserveAspectRatio="none" aria-label="wind speed, gusts, direction">
     <g font-size="10.5" fill="#8b98a9"><text x="4" y="12" fill="#5c6878">wind</text>{% for w in c.winds %}<text x="{{ w.x }}" y="12"{% if w.hot %} fill="#e0a63d" font-weight="600"{% endif %}>{{ w.text }}</text>{% endfor %}</g>
@@ -152,9 +164,19 @@
     {% for d in outlook.days %}
     <div class="ol-day {{ d.conf }}">
       <div class="ol-name">{{ d.label }}</div>
+      <svg class="ol-ic" viewBox="0 0 24 24" aria-label="{{ d.word or '' }}">
+        {% if d.icon == 'sun' %}<circle cx="12" cy="12" r="5" fill="#e0a63d"/><g stroke="#e0a63d" stroke-width="1.6"><line x1="12" y1="2" x2="12" y2="5"/><line x1="12" y1="19" x2="12" y2="22"/><line x1="2" y1="12" x2="5" y2="12"/><line x1="19" y1="12" x2="22" y2="12"/><line x1="4.9" y1="4.9" x2="7" y2="7"/><line x1="17" y1="17" x2="19.1" y2="19.1"/><line x1="19.1" y1="4.9" x2="17" y2="7"/><line x1="7" y1="17" x2="4.9" y2="19.1"/></g>
+        {% elif d.icon == 'part' %}<circle cx="9" cy="9" r="4.5" fill="#e0a63d"/><ellipse cx="14" cy="15" rx="7.5" ry="5" fill="#8b98a9"/>
+        {% elif d.icon == 'cloud' %}<ellipse cx="12" cy="13" rx="8.5" ry="5.5" fill="#8b98a9"/>
+        {% elif d.icon == 'fog' %}<g stroke="#8b98a9" stroke-width="2" stroke-linecap="round"><line x1="4" y1="9" x2="20" y2="9"/><line x1="6" y1="13" x2="18" y2="13"/><line x1="4" y1="17" x2="20" y2="17"/></g>
+        {% elif d.icon == 'snow' %}<ellipse cx="12" cy="9" rx="8" ry="5" fill="#8b98a9"/><g fill="#e8edf4" font-size="7"><text x="7" y="21">✦</text><text x="14" y="21">✦</text></g>
+        {% elif d.icon == 'storm' %}<ellipse cx="12" cy="9" rx="8" ry="5" fill="#8b98a9"/><polygon points="12,11 8,18 11.4,18 10,23 16,15.5 12.4,15.5 14.4,11" fill="#e0a63d"/>
+        {% elif d.icon == 'rain' %}<ellipse cx="12" cy="9" rx="8" ry="5" fill="#8b98a9"/><g stroke="#5b9dd9" stroke-width="1.8" stroke-linecap="round"><line x1="8" y1="16" x2="7" y2="21"/><line x1="12" y1="16" x2="11" y2="21"/><line x1="16" y1="16" x2="15" y2="21"/></g>
+        {% endif %}
+      </svg>
       <div class="ol-word">{{ d.word or '—' }}</div>
       <div class="ol-t"><b>{{ '%.0f'|format(d.high) if d.high is not none else '–' }}°</b> / {{ '%.0f'|format(d.low) if d.low is not none else '–' }}°</div>
-      <div class="ol-pop">{% if d['pop'] is not none %}{{ d['pop'] }}% rain{% endif %}</div>
+      <div class="ol-pop">{% if d['pop'] is not none and d['pop'] > 0 %}{{ d['pop'] }}%{% if d.rain_when %} {{ d.rain_when }}{% endif %}{% endif %}</div>
     </div>
     {% endfor %}
   </div>

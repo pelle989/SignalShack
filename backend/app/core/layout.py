@@ -19,6 +19,29 @@ DENSITIES = ["comfortable", "compact", "focus"]
 FOCUS_CARD_CAP = 3
 
 
+FORECAST_STYLES = ["chart", "table"]
+
+
+def get_forecast_style(conn: sqlite3.Connection) -> str:
+    row = conn.execute(
+        "SELECT layout_json FROM board WHERE is_default=1").fetchone()
+    if row is None:
+        return "chart"
+    s = json.loads(row["layout_json"] or "{}").get("forecast_style")
+    return s if s in FORECAST_STYLES else "chart"
+
+
+def set_forecast_style(conn: sqlite3.Connection, style: str) -> None:
+    if style not in FORECAST_STYLES:
+        return
+    cards = get_layout(conn)
+    with conn:
+        conn.execute(
+            "UPDATE board SET layout_json=? WHERE is_default=1",
+            (json.dumps({"cards": cards, "density": get_density(conn),
+                         "forecast_style": style}),))
+
+
 def get_density(conn: sqlite3.Connection) -> str:
     row = conn.execute(
         "SELECT layout_json FROM board WHERE is_default=1").fetchone()
@@ -33,8 +56,10 @@ def set_density(conn: sqlite3.Connection, density: str) -> None:
         return
     cards = get_layout(conn)
     with conn:
-        conn.execute("UPDATE board SET layout_json=? WHERE is_default=1",
-                     (json.dumps({"cards": cards, "density": density}),))
+        conn.execute(
+            "UPDATE board SET layout_json=? WHERE is_default=1",
+            (json.dumps({"cards": cards, "density": density,
+                         "forecast_style": get_forecast_style(conn)}),))
 
 
 def get_layout(conn: sqlite3.Connection) -> list[dict]:
@@ -56,10 +81,11 @@ def get_layout(conn: sqlite3.Connection) -> list[dict]:
 
 
 def _save(conn: sqlite3.Connection, cards: list[dict]) -> None:
-    density = get_density(conn)              # reorders must not drop density
-    with conn:
-        conn.execute("UPDATE board SET layout_json=? WHERE is_default=1",
-                     (json.dumps({"cards": cards, "density": density}),))
+    with conn:      # reorders must not drop the board's other settings
+        conn.execute(
+            "UPDATE board SET layout_json=? WHERE is_default=1",
+            (json.dumps({"cards": cards, "density": get_density(conn),
+                         "forecast_style": get_forecast_style(conn)}),))
 
 
 def move(conn: sqlite3.Connection, card_type: str, direction: str) -> None:

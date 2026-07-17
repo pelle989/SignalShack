@@ -111,8 +111,17 @@
 
   /* forecast grid + 7-day outlook — sized to live in a standard card slot
      beside the primary (not full-width strips) */
-  .fxsvg{width:100%;height:13vh;display:block;margin-top:.4vh}
+  .fxsvg{width:100%;height:14vh;display:block;margin-top:.4vh}
   .fxsvg.wind{height:4.5vh;margin-top:.8vh}
+  .fx{width:100%;border-collapse:collapse;font-size:1.35vh;color:var(--dim)}
+  .fx td{text-align:center;padding:.25vh .1vw}
+  .fx td:first-child{text-align:left;color:var(--faint);font-size:1.1vh;
+                     text-transform:uppercase;letter-spacing:.06em;
+                     white-space:nowrap}
+  .fx-h td{color:var(--text);font-weight:600}
+  .fx-t td{color:var(--text)}
+  .fx-wet{color:var(--amber);font-weight:600}
+  .ol-ic{width:3.2vh;height:3.2vh;display:block;margin:.2vh auto}
   .ol{display:flex;gap:.2vw}
   .ol-day{flex:1;text-align:center;min-width:0;overflow:hidden}
   .ol-day.medium{opacity:.72} .ol-day.low{opacity:.48}

@@ -40,11 +40,13 @@ def test_forecast_grid_next_12_hours():
     # trailsnh-style chart geometry, server-rendered
     c = grid["chart"]
     assert len(c["temp_points"].split()) == 12
-    assert len(c["bars"]) == 12 and len(c["cloud"]) == 12
-    assert c["hi"]["text"].endswith("°")
-    assert 14 <= c["hi"]["y"] <= 62 and c["lo"]["y"] == 60.0   # scaled range
+    assert len(c["dots"]) == 12 and len(c["bars"]) == 12
+    assert len(c["temp_labels"]) == 6 and len(c["hours"]) == 6   # every 2h
+    assert c["cloud_poly"].startswith("8,14")            # ceiling polygon
     assert c["dirs"][0]["text"] == "W →"                 # arrow = blowing toward
     assert all(w["text"] for w in c["winds"])
+    # storm-afternoon pops (70%) get % labels; dry hours don't
+    assert any(p["text"] == "70" for p in c["pop_labels"])
 
 
 def test_forecast_grid_tolerates_old_snapshots():
@@ -81,4 +83,54 @@ def test_board_integration_and_layout(tmp_path, monkeypatch):
     tpl = templates.env.get_template("_board.html")
     html = tpl.render(**ctx, csrf="x")
     assert "Next 12 hours" in html and "Next 7 days" in html
-    assert "<polyline" in html and "% rain" in html      # SVG curve rendered
+    assert "<polyline" in html and "<polygon" in html    # curve + cloud ceiling
+    assert "ol-ic" in html                               # outlook icons
+
+
+def test_rain_when_am_pm_split():
+    from app.display.service import _rain_when
+    hours = [f"2026-07-18T{h:02d}:00" for h in range(24)]
+    am_rain = {"time": hours,
+               "precipitation_probability": [60 if 7 <= h < 11 else 10
+                                             for h in range(24)]}
+    pm_rain = {"time": hours,
+               "precipitation_probability": [55 if 14 <= h <= 19 else 10
+                                             for h in range(24)]}
+    all_day = {"time": hours, "precipitation_probability": [70] * 24}
+    dry = {"time": hours, "precipitation_probability": [15] * 24}
+    assert _rain_when(am_rain, "2026-07-18") == "AM"
+    assert _rain_when(pm_rain, "2026-07-18") == "PM"
+    assert _rain_when(all_day, "2026-07-18") == "all day"
+    assert _rain_when(dry, "2026-07-18") is None
+    assert _rain_when({}, "2026-07-18") is None          # no hourly: no claim
+
+
+def test_outlook_icons_mapped():
+    from app.display.service import _wmo_icon
+    assert _wmo_icon(0) == "sun" and _wmo_icon(2) == "part"
+    assert _wmo_icon(3) == "cloud" and _wmo_icon(45) == "fog"
+    assert _wmo_icon(61) == "rain" and _wmo_icon(75) == "snow"
+    assert _wmo_icon(95) == "storm" and _wmo_icon(None) is None
+
+
+def test_forecast_style_toggle(tmp_path, monkeypatch):
+    from app.core import layout
+    conn = setup_conn(tmp_path, monkeypatch)
+    with conn:
+        conn.execute("INSERT INTO board (name, is_default, layout_json)"
+                     " VALUES ('Default', 1, '{}')")
+    assert layout.get_forecast_style(conn) == "chart"    # default
+    layout.set_forecast_style(conn, "table")
+    assert layout.get_forecast_style(conn) == "table"
+    layout.set_forecast_style(conn, "hologram")          # unknown: ignored
+    assert layout.get_forecast_style(conn) == "table"
+    layout.move(conn, "alerts", "up")                    # reorder preserves it
+    layout.set_density(conn, "compact")                  # density too
+    assert layout.get_forecast_style(conn) == "table"
+    # table markup renders when selected
+    snapshots.save(conn, 1, "open_meteo", payload_with_outlook(), now=NOW)
+    ctx = compose_board(conn, now=NOW)
+    assert ctx["forecast_style"] == "table"
+    from app.main import templates
+    html = templates.env.get_template("_board.html").render(**ctx, csrf="x")
+    assert "Rain %" in html and "<polyline" not in html

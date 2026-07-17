@@ -588,7 +588,23 @@ async def layout_page(request: Request):
                  for c in layout.get_layout(conn)]
         return _render(request, "layout.html", guard, cards=cards,
                        density=layout.get_density(conn),
-                       densities=layout.DENSITIES)
+                       densities=layout.DENSITIES,
+                       forecast_style=layout.get_forecast_style(conn))
+    finally:
+        conn.close()
+
+
+@router.post("/layout/forecast-style")
+async def layout_forecast_style(request: Request, style: str = Form(""),
+                                csrf: str = Form(None)):
+    conn = db.connect()
+    try:
+        guard = _guard(request, conn)
+        if isinstance(guard, RedirectResponse):
+            return guard
+        if security.check_csrf(guard, csrf):
+            layout.set_forecast_style(conn, style)
+        return RedirectResponse("/admin/layout", status_code=303)
     finally:
         conn.close()
 
