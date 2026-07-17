@@ -122,7 +122,8 @@ def test_next_departures_direction_filtered_max3():
                  # departed already
                  {"route": "R", "stops": {"R36": T0 - 300, "R31": T0 + 60}}]
     deps = next_departures(all_trips, "R", "R36", "R31", T0)
-    assert deps == [T0 + 300, T0 + 900, T0 + 1500]       # 3, sorted, filtered
+    assert deps == [T0 + 300, T0 + 900, T0 + 1500, T0 + 2100]  # sorted, filtered
+    assert len(next_departures(all_trips, "R", "R36", "R31", T0, n=2)) == 2
 
 
 def test_board_rows_show_next_trains(tmp_path, monkeypatch):
@@ -141,10 +142,18 @@ def test_board_rows_show_next_trains(tmp_path, monkeypatch):
     by_line = {leg["line"]: leg for leg in ctx["transit_routes"][0]["legs"]}
     assert by_line["R"]["next_trains"] == ["7:35", "7:45"]
     assert by_line["F"]["next_trains"] == ["7:44"]
-    # stale RT: times vanish rather than lie
-    later = datetime(2026, 7, 16, 7, 40)     # snapshot now 10 min old
+    # grace window (snapshot 2 min old): future times stay, age admitted,
+    # but the strict-fresh surfaces (chain live estimate) fall back
+    graced = datetime(2026, 7, 16, 7, 32)
+    ctx = compose_board(conn, now=graced)
+    assert ctx["transit"][0]["next_trains"] == ["7:35", "7:45"]
+    assert ctx["transit_rt_note"] == "Live times updated 2 min ago"
+    assert ctx["transit_routes"][0]["live"] is None
+    # hard cutoff (10 min old): times gone, failure named
+    later = datetime(2026, 7, 16, 7, 40)
     ctx = compose_board(conn, now=later)
     assert ctx["transit"][0]["next_trains"] == []
+    assert "unavailable" in ctx["transit_rt_note"]
 
 
 def test_scheduler_rt_includes_segment_monitors(tmp_path, monkeypatch):

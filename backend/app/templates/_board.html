@@ -76,6 +76,7 @@
   {% endfor %}
 
   {% if s.stale %}<div class="empty warn">Status may be outdated.</div>{% endif %}
+  {% if transit_rt_note %}<div class="empty warn" style="font-size:1.6vh">{{ transit_rt_note }}</div>{% endif %}
   <div class="stamp">MTA · {{ stamp_transit }}</div>
 </div>
 

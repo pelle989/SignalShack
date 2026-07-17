@@ -146,16 +146,28 @@ def compose_board(conn: sqlite3.Connection, now: datetime | None = None) -> dict
     # 5-minute-old "next train" is a lie. Missing/stale => scheduled fallback.
     from app.adapters.mta_rt import MTARealtimeAdapter, live_chain, next_departures
     rt_snap = snapshots.latest(conn, loc["id"], "mta_rt")
-    rt_state = snapshots.freshness(
-        rt_snap and rt_snap["fetched_at"],
-        MTARealtimeAdapter.manifest.poll_seconds_fresh,
-        MTARealtimeAdapter.manifest.stale_after_seconds, now)
-    trips = (rt_snap["payload"].get("trips", [])
-             if rt_snap and rt_state == "fresh" else [])
+    # two tiers of trust by AGE: LIVE badge + chain totals demand ≤60s; next-
+    # train times get a grace window (≤5 min) because they self-prune — past
+    # departures drop out — but the card admits the age. Beyond 5 min: times
+    # gone and the failure is named, never silent (invariant 2).
+    rt_m = MTARealtimeAdapter.manifest
+    rt_age = ((now - datetime.fromisoformat(rt_snap["fetched_at"]))
+              .total_seconds() if rt_snap else None)
+    trips_all = rt_snap["payload"].get("trips", []) if rt_snap else []
+    trips_live = trips_all if rt_age is not None \
+        and rt_age <= rt_m.poll_seconds_fresh else []
+    trips_view = trips_all if rt_age is not None \
+        and rt_age <= rt_m.stale_after_seconds else []
+    ctx["transit_rt_note"] = None
+    if rt_age is not None and rt_age > rt_m.stale_after_seconds:
+        ctx["transit_rt_note"] = "Live times unavailable — retrying."
+    elif rt_age is not None and rt_age > rt_m.poll_seconds_fresh:
+        ctx["transit_rt_note"] = (
+            f"Live times updated {max(1, round(rt_age / 60))} min ago")
 
     def _dep_labels(line, from_id, to_id):
         return [datetime.fromtimestamp(d).strftime("%-I:%M")
-                for d in next_departures(trips, line, from_id, to_id,
+                for d in next_departures(trips_view, line, from_id, to_id,
                                          int(now.timestamp()))]
 
     if monitors:
@@ -181,7 +193,7 @@ def compose_board(conn: sqlite3.Connection, now: datetime | None = None) -> dict
                 if segment else "")
             view["next_trains"] = (
                 _dep_labels(m["field"], seg_cfg["from_id"], seg_cfg["to_id"])
-                if trips and segment else [])
+                if trips_view and segment else [])
             if t_state == "unavailable":     # honest state: never claim good service
                 view["label"] = "Status unknown"
                 view["attention"] = None
@@ -217,7 +229,8 @@ def compose_board(conn: sqlite3.Connection, now: datetime | None = None) -> dict
                     ride_s += s
                 v["ride_min"] = round(s / 60) if s else None   # scheduled default
                 v["next_trains"] = (_dep_labels(leg["line"], leg["from_id"],
-                                                leg["to_id"]) if trips else [])
+                                                leg["to_id"])
+                                    if trips_view else [])
                 legs.append(v)
             # scheduled total: ride time + transfer buffer per change.
             # HONEST LABEL: timetable estimate, not live — GTFS-RT is C2 slice 3.
@@ -225,7 +238,8 @@ def compose_board(conn: sqlite3.Connection, now: datetime | None = None) -> dict
                        if timed and legs else None)
             worst = min((leg["status"] for leg in legs),
                         key=STATUS_RANK.index, default="good")
-            live = live_chain(cfg_legs, trips, int(now.timestamp())) if trips else None
+            live = (live_chain(cfg_legs, trips_live, int(now.timestamp()))
+                    if trips_live else None)
             if live:
                 # per-leg live ride times replace the scheduled defaults
                 for v, lt in zip(legs, live["legs"], strict=True):
