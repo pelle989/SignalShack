@@ -55,7 +55,7 @@
   {% for r in transit_routes %}
   <div class="t-row t-route">
     <div class="t-legs">
-      <div class="t-name">{{ r.name }}{% if r.est_min %} <span class="t-seg">· ~{{ r.est_min }} min scheduled</span>{% endif %}</div>
+      <div class="t-name">{{ r.name }}{% if r.live %} <span class="t-seg">· <span class="t-live">live</span> ~{{ r.live.total_min }} min · next train {{ r.live.depart_label }}</span>{% elif r.est_min %} <span class="t-seg">· ~{{ r.est_min }} min scheduled</span>{% endif %}</div>
       {% for leg in r.legs %}
       <div class="t-leg">
         <span class="t-legno">{{ loop.index }}</span>

@@ -169,6 +169,7 @@ def compose_board(conn: sqlite3.Connection, now: datetime | None = None) -> dict
         "SELECT name, legs_json FROM commute_profile WHERE mode='train'"
         " AND actively_monitored=1 ORDER BY id").fetchall()
     if route_rows:
+        from app.adapters.mta_rt import MTARealtimeAdapter, live_chain
         from app.transit import gtfs
         mta_snap = snapshots.latest(conn, loc["id"], "mta")
         t_state = snapshots.freshness(mta_snap and mta_snap["fetched_at"],
@@ -177,10 +178,20 @@ def compose_board(conn: sqlite3.Connection, now: datetime | None = None) -> dict
         ctx["stamp_transit"] = ctx["stamp_transit"] or snapshots.stamp(
             mta_snap and mta_snap["fetched_at"], t_state)
         normalized = MTAAdapter().normalize(mta_snap["payload"]) if mta_snap else {}
+        # live trip updates: FRESH only — a 5-minute-old "next train" is a lie.
+        # Missing/stale => scheduled fallback, never a blank (invariant 2).
+        rt_snap = snapshots.latest(conn, loc["id"], "mta_rt")
+        rt_state = snapshots.freshness(
+            rt_snap and rt_snap["fetched_at"],
+            MTARealtimeAdapter.manifest.poll_seconds_fresh,
+            MTARealtimeAdapter.manifest.stale_after_seconds, now)
+        trips = (rt_snap["payload"].get("trips", [])
+                 if rt_snap and rt_state == "fresh" else [])
         for r in route_rows:
             legs = []
             ride_s, timed = 0, True
-            for leg in json.loads(r["legs_json"] or "[]"):
+            cfg_legs = json.loads(r["legs_json"] or "[]")
+            for leg in cfg_legs:
                 segment = gtfs.segment_ids(leg["line"], leg["from_id"], leg["to_id"])
                 v = line_view(leg["line"], normalized, segment=segment)
                 v["from_name"], v["to_name"] = leg["from_name"], leg["to_name"]
@@ -196,8 +207,13 @@ def compose_board(conn: sqlite3.Connection, now: datetime | None = None) -> dict
                        if timed and legs else None)
             worst = min((leg["status"] for leg in legs),
                         key=STATUS_RANK.index, default="good")
+            live = live_chain(cfg_legs, trips, int(now.timestamp())) if trips else None
+            if live:
+                live = {"total_min": live["total_min"],
+                        "depart_label": datetime.fromtimestamp(
+                            live["depart_epoch"]).strftime("%-I:%M")}
             route = {"name": r["name"], "legs": legs, "state": t_state,
-                     "est_min": est_min, "status": worst,
+                     "est_min": est_min, "live": live, "status": worst,
                      "label": {"good": "✓ All clear", "delays": "Delays en route",
                                "service_change": "Service change en route",
                                "planned_work": "Planned work en route",
