@@ -116,8 +116,14 @@ class MTAAdapter(Adapter):
                         routes.add(informed["route_id"])
                     if informed.get("stop_id"):
                         stops.append(parent(informed["stop_id"]))
+                # active_period: when the alert APPLIES (late-night/weekend
+                # alerts sit in the feed all day — showing them outside their
+                # window painted midday boards with midnight suspensions)
+                periods = [[p.get("start"), p.get("end")]
+                           for p in alert.get("active_period", [])
+                           if p.get("start") or p.get("end")]
                 entry = {"status": status, "headline": headline[:140],
-                         "stops": sorted(set(stops))}
+                         "stops": sorted(set(stops)), "periods": periods}
                 for route in routes:
                     add(route, entry)
                 # rail branches roll up to a feed-level pseudo-line for C1
@@ -129,14 +135,25 @@ class MTAAdapter(Adapter):
 
 
 def line_view(line_id: str, normalized: dict,
-              segment: set[str] | None = None) -> dict:
+              segment: set[str] | None = None,
+              now_epoch: int | None = None) -> dict:
     """Card-ready view for one monitored line. segment: parent stop ids the
     household rides — alerts scoped entirely OUTSIDE it are suppressed;
-    line-wide alerts (no stop ids) always count."""
+    line-wide alerts (no stop ids) always count. now_epoch: alerts whose
+    active_period excludes now are suppressed (no periods = always active)."""
     entries = normalized.get("alerts", {}).get(line_id, [])
+
+    def in_window(e):
+        periods = e.get("periods") or []
+        if not periods or now_epoch is None:
+            return True
+        return any((start or 0) <= now_epoch <= (end or float("inf"))
+                   for start, end in periods)
+
     relevant = [e for e in entries
-                if not e["stops"] or segment is None
-                or set(e["stops"]) & segment]
+                if in_window(e)
+                and (not e["stops"] or segment is None
+                     or set(e["stops"]) & segment)]
     worst = min(relevant, key=lambda e: STATUS_RANK.index(e["status"]),
                 default=None)
     status = worst["status"] if worst else "good"

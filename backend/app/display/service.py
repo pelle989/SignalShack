@@ -153,7 +153,8 @@ def compose_board(conn: sqlite3.Connection, now: datetime | None = None) -> dict
             if seg_cfg.get("from_id") and seg_cfg.get("to_id"):
                 segment = gtfs.segment_ids(m["field"], seg_cfg["from_id"],
                                            seg_cfg["to_id"])
-            view = line_view(m["field"], normalized, segment=segment)
+            view = line_view(m["field"], normalized, segment=segment,
+                             now_epoch=int(now.timestamp()))
             view["state"] = t_state
             view["segment_label"] = (
                 f"{seg_cfg.get('from_name', '')} → {seg_cfg.get('to_name', '')}"
@@ -193,7 +194,8 @@ def compose_board(conn: sqlite3.Connection, now: datetime | None = None) -> dict
             cfg_legs = json.loads(r["legs_json"] or "[]")
             for leg in cfg_legs:
                 segment = gtfs.segment_ids(leg["line"], leg["from_id"], leg["to_id"])
-                v = line_view(leg["line"], normalized, segment=segment)
+                v = line_view(leg["line"], normalized, segment=segment,
+                              now_epoch=int(now.timestamp()))
                 v["from_name"], v["to_name"] = leg["from_name"], leg["to_name"]
                 s = gtfs.travel_seconds(leg["line"], leg["from_id"], leg["to_id"])
                 if s is None:               # dataset predates time capture

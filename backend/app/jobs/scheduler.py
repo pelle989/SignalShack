@@ -99,6 +99,33 @@ def _active_adapters(conn) -> tuple:
     return tuple(adapters)
 
 
+GTFS_REFRESH_DAYS = 90
+
+
+async def _maybe_refresh_gtfs(conn, engaged: bool) -> None:
+    """Quiet stop-data refresh: only if the household ever downloaded it,
+    only while someone's watching, at most one attempt per day."""
+    from app.transit import gtfs
+    if not engaged or not gtfs.DATA_FILE.exists():
+        return
+    age_s = datetime.now().timestamp() - gtfs.DATA_FILE.stat().st_mtime
+    if age_s < GTFS_REFRESH_DAYS * 86400:
+        return
+    today = datetime.now().date().isoformat()
+    if snapshots.kv_get(conn, "gtfs_refresh_attempt", None) == today:
+        return
+    snapshots.kv_set(conn, "gtfs_refresh_attempt", today)   # even on failure
+    try:
+        await asyncio.to_thread(gtfs.build_dataset)
+    except Exception as exc:  # noqa: BLE001 — refresh failure must never crash the loop
+        conn.execute(
+            "INSERT INTO event_log (ts, level, service, event_type, payload_json)"
+            " VALUES (?, 'warn', 'gtfs', 'refresh_failed', ?)",
+            (datetime.now().isoformat(timespec="seconds"),
+             f'{{"error": "{type(exc).__name__}"}}'))
+        conn.commit()
+
+
 async def poll_loop(stop: asyncio.Event) -> None:
     while not stop.is_set():
         conn = db.connect()
@@ -109,6 +136,7 @@ async def poll_loop(stop: asyncio.Event) -> None:
                 for adapter in _active_adapters(conn):
                     if _due(adapter, loc, engaged):
                         await _fetch_and_store(conn, adapter, loc)
+            await _maybe_refresh_gtfs(conn, engaged)
         finally:
             conn.close()
         try:

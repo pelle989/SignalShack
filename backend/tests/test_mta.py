@@ -29,6 +29,28 @@ FIXTURE = {"feeds": {
 }, "errors": []}
 
 
+def test_alert_active_period_filters_out_of_window():
+    """A late-night suspension must NOT paint the midday board."""
+    feed = {"feeds": {"subway": {"entity": [{"alert": {
+        "transit_realtime.mercury_alert": {"alert_type": "Suspended"},
+        "header_text": {"translation": [{"text": "No late night R service."}]},
+        "active_period": [{"start": 1000, "end": 2000}],
+        "informed_entity": [{"route_id": "R"}]}}]}}, "errors": []}
+    norm = MTAAdapter().normalize(feed)
+    assert line_view("R", norm, now_epoch=3000)["status"] == "good"      # after
+    assert line_view("R", norm, now_epoch=500)["status"] == "good"       # before
+    assert line_view("R", norm, now_epoch=1500)["status"] == "suspended"  # during
+    assert line_view("R", norm)["status"] == "suspended"    # no clock: keep
+    # open-ended period: no end = active from start onward
+    feed["feeds"]["subway"]["entity"][0]["alert"]["active_period"] = [
+        {"start": 1000}]
+    norm = MTAAdapter().normalize(feed)
+    assert line_view("R", norm, now_epoch=99999)["status"] == "suspended"
+    # alerts without periods are always active
+    norm = MTAAdapter().normalize(FIXTURE)
+    assert line_view("F", norm, now_epoch=99999)["status"] == "delays"
+
+
 def test_normalize_classifies_and_rolls_up_rail():
     out = MTAAdapter().normalize(FIXTURE)
     assert line_view("F", out)["status"] == "delays"
