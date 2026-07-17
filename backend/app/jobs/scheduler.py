@@ -85,14 +85,20 @@ def _active_adapters(conn) -> tuple:
                         " AND actively_monitored=1 LIMIT 1").fetchone())
     if mta_wanted:
         adapters.append(MTAAdapter())
-    # live trip updates: only the lines the household actually chains
-    chain_lines = {leg["line"]
-                   for row in conn.execute(
-                       "SELECT legs_json FROM commute_profile WHERE mode='train'"
-                       " AND actively_monitored=1").fetchall()
-                   for leg in json.loads(row["legs_json"] or "[]")}
-    if chain_lines:
-        adapters.append(MTARealtimeAdapter(lines=chain_lines))
+    # live trip updates: chained lines + segment-scoped monitors (their
+    # from-stop anchors "next 3 trains"; line-wide monitors have no stop)
+    rt_lines = {leg["line"]
+                for row in conn.execute(
+                    "SELECT legs_json FROM commute_profile WHERE mode='train'"
+                    " AND actively_monitored=1").fetchall()
+                for leg in json.loads(row["legs_json"] or "[]")}
+    for row in conn.execute("SELECT field, config_json FROM monitor"
+                            " WHERE adapter='mta'").fetchall():
+        cfg = json.loads(row["config_json"] or "{}")
+        if cfg.get("from_id") and cfg.get("to_id"):
+            rt_lines.add(row["field"])
+    if rt_lines:
+        adapters.append(MTARealtimeAdapter(lines=rt_lines))
     key = secrets.retrieve(conn, "airnow") if secrets.exists(conn, "airnow") else None
     if key:
         adapters.append(AirNowAdapter(api_key=key))

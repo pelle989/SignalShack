@@ -142,6 +142,22 @@ def compose_board(conn: sqlite3.Connection, now: datetime | None = None) -> dict
         " ORDER BY id").fetchall()
     ctx["transit"] = []
     ctx["stamp_transit"] = None
+    # live trip updates, shared by line rows and chains. FRESH only — a
+    # 5-minute-old "next train" is a lie. Missing/stale => scheduled fallback.
+    from app.adapters.mta_rt import MTARealtimeAdapter, live_chain, next_departures
+    rt_snap = snapshots.latest(conn, loc["id"], "mta_rt")
+    rt_state = snapshots.freshness(
+        rt_snap and rt_snap["fetched_at"],
+        MTARealtimeAdapter.manifest.poll_seconds_fresh,
+        MTARealtimeAdapter.manifest.stale_after_seconds, now)
+    trips = (rt_snap["payload"].get("trips", [])
+             if rt_snap and rt_state == "fresh" else [])
+
+    def _dep_labels(line, from_id, to_id):
+        return [datetime.fromtimestamp(d).strftime("%-I:%M")
+                for d in next_departures(trips, line, from_id, to_id,
+                                         int(now.timestamp()))]
+
     if monitors:
         from app.transit import gtfs
         mta_snap = snapshots.latest(conn, loc["id"], "mta")
@@ -163,6 +179,9 @@ def compose_board(conn: sqlite3.Connection, now: datetime | None = None) -> dict
             view["segment_label"] = (
                 f"{seg_cfg.get('from_name', '')} → {seg_cfg.get('to_name', '')}"
                 if segment else "")
+            view["next_trains"] = (
+                _dep_labels(m["field"], seg_cfg["from_id"], seg_cfg["to_id"])
+                if trips and segment else [])
             if t_state == "unavailable":     # honest state: never claim good service
                 view["label"] = "Status unknown"
                 view["attention"] = None
@@ -174,7 +193,6 @@ def compose_board(conn: sqlite3.Connection, now: datetime | None = None) -> dict
         "SELECT name, legs_json FROM commute_profile WHERE mode='train'"
         " AND actively_monitored=1 ORDER BY id").fetchall()
     if route_rows:
-        from app.adapters.mta_rt import MTARealtimeAdapter, live_chain
         from app.transit import gtfs
         mta_snap = snapshots.latest(conn, loc["id"], "mta")
         t_state = snapshots.freshness(mta_snap and mta_snap["fetched_at"],
@@ -183,15 +201,6 @@ def compose_board(conn: sqlite3.Connection, now: datetime | None = None) -> dict
         ctx["stamp_transit"] = ctx["stamp_transit"] or snapshots.stamp(
             mta_snap and mta_snap["fetched_at"], t_state)
         normalized = MTAAdapter().normalize(mta_snap["payload"]) if mta_snap else {}
-        # live trip updates: FRESH only — a 5-minute-old "next train" is a lie.
-        # Missing/stale => scheduled fallback, never a blank (invariant 2).
-        rt_snap = snapshots.latest(conn, loc["id"], "mta_rt")
-        rt_state = snapshots.freshness(
-            rt_snap and rt_snap["fetched_at"],
-            MTARealtimeAdapter.manifest.poll_seconds_fresh,
-            MTARealtimeAdapter.manifest.stale_after_seconds, now)
-        trips = (rt_snap["payload"].get("trips", [])
-                 if rt_snap and rt_state == "fresh" else [])
         for r in route_rows:
             legs = []
             ride_s, timed = 0, True
@@ -207,6 +216,8 @@ def compose_board(conn: sqlite3.Connection, now: datetime | None = None) -> dict
                 else:
                     ride_s += s
                 v["ride_min"] = round(s / 60) if s else None   # scheduled default
+                v["next_trains"] = (_dep_labels(leg["line"], leg["from_id"],
+                                                leg["to_id"]) if trips else [])
                 legs.append(v)
             # scheduled total: ride time + transfer buffer per change.
             # HONEST LABEL: timetable estimate, not live — GTFS-RT is C2 slice 3.

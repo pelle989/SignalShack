@@ -47,7 +47,7 @@
   {% for t in transit %}
   <div class="t-row">
     <span class="bullet" style="background:{{ t.color }};{% if t.dark_text %}color:#111{% endif %}">{{ t.line if t.line not in ('LIRR','MNR') else '' }}</span>
-    <span class="t-name">{{ 'LIRR' if t.line == 'LIRR' else 'Metro-North' if t.line == 'MNR' else t.line ~ ' Train' }}{% if t.segment_label %} <span class="t-seg">· {{ t.segment_label }}</span>{% endif %}</span>
+    <span class="t-name">{{ 'LIRR' if t.line == 'LIRR' else 'Metro-North' if t.line == 'MNR' else t.line ~ ' Train' }}{% if t.segment_label %} <span class="t-seg">· {{ t.segment_label }}</span>{% endif %}{% if t.next_trains %} <span class="t-seg">({{ t.next_trains | join(' · ') }})</span>{% endif %}</span>
     <span class="t-st" style="color:{% if t.status == 'good' %}var(--green){% elif t.attention == 'red' %}var(--red){% elif t.attention == 'amber' %}var(--amber){% else %}var(--dim){% endif %}">{{ t.label }}</span>
   </div>
   {% if t.status != 'good' and t.headline %}<div class="t-detail">{{ t.headline }}</div>{% endif %}
@@ -62,7 +62,7 @@
       <div class="t-leg">
         <span class="t-legno">{{ loop.index }}</span>
         <span class="bullet" style="background:{{ leg.color }};{% if leg.dark_text %}color:#111{% endif %}">{{ leg.line }}</span>
-        <span class="t-legname">{{ leg.from_name }} → {{ leg.to_name }}</span>
+        <span class="t-legname">{{ leg.from_name }} → {{ leg.to_name }}{% if leg.next_trains %} <span class="t-seg">({{ leg.next_trains | join(' · ') }})</span>{% endif %}</span>
         <span class="t-stwrap">
           {% if leg.ride_min %}<span class="t-ride">~{{ leg.ride_min }} min{% if not leg.ride_live %} sched{% endif %}</span>{% endif %}
           <span class="t-st" style="color:{% if leg.status == 'good' %}var(--green){% elif leg.attention == 'red' %}var(--red){% elif leg.attention == 'amber' %}var(--amber){% else %}var(--dim){% endif %}">{{ leg.label }}</span>

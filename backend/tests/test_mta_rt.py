@@ -112,6 +112,52 @@ def test_scheduler_polls_rt_for_chain_lines_only(tmp_path, monkeypatch):
     assert "mta" in names and "mta_rt" not in names
 
 
+def test_next_departures_direction_filtered_max3():
+    from app.adapters.mta_rt import next_departures
+    all_trips = [*trips(),
+                 {"route": "R", "stops": {"R36": T0 + 1500, "R31": T0 + 1860}},
+                 {"route": "R", "stops": {"R36": T0 + 2100, "R31": T0 + 2460}},
+                 # wrong direction: arrives at R36 AFTER R31
+                 {"route": "R", "stops": {"R36": T0 + 400, "R31": T0 + 100}},
+                 # departed already
+                 {"route": "R", "stops": {"R36": T0 - 300, "R31": T0 + 60}}]
+    deps = next_departures(all_trips, "R", "R36", "R31", T0)
+    assert deps == [T0 + 300, T0 + 900, T0 + 1500]       # 3, sorted, filtered
+
+
+def test_board_rows_show_next_trains(tmp_path, monkeypatch):
+    use_r_dataset(tmp_path, monkeypatch)
+    conn = setup_conn(tmp_path, monkeypatch)
+    add_route(conn)
+    with conn:
+        conn.execute("INSERT INTO monitor (adapter, field, config_json) VALUES"
+                     " ('mta', 'R', ?)",
+                     (json.dumps({"from_id": "R36", "to_id": "R31",
+                                  "from_name": "25 St", "to_name": "Barclays"}),))
+    snapshots.save(conn, 1, "mta", {"feeds": {}, "errors": []}, now=NOW)
+    snapshots.save(conn, 1, "mta_rt", {"trips": trips(), "errors": []}, now=NOW)
+    ctx = compose_board(conn, now=NOW)
+    assert ctx["transit"][0]["next_trains"] == ["7:35", "7:45"]
+    by_line = {leg["line"]: leg for leg in ctx["transit_routes"][0]["legs"]}
+    assert by_line["R"]["next_trains"] == ["7:35", "7:45"]
+    assert by_line["F"]["next_trains"] == ["7:44"]
+    # stale RT: times vanish rather than lie
+    later = datetime(2026, 7, 16, 7, 40)     # snapshot now 10 min old
+    ctx = compose_board(conn, now=later)
+    assert ctx["transit"][0]["next_trains"] == []
+
+
+def test_scheduler_rt_includes_segment_monitors(tmp_path, monkeypatch):
+    conn = setup_conn(tmp_path, monkeypatch)
+    with conn:
+        conn.execute("INSERT INTO monitor (adapter, field, config_json) VALUES"
+                     " ('mta', 'L', ?)",
+                     (json.dumps({"from_id": "L10", "to_id": "L03"}),))
+        conn.execute("INSERT INTO monitor (adapter, field) VALUES ('mta', 'G')")
+    rt = [a for a in _active_adapters(conn) if a.manifest.name == "mta_rt"]
+    assert rt and rt[0].lines == {"L"}       # segment yes, line-wide no
+
+
 def test_rt_adapter_registry_and_json_normalize():
     a = MTARealtimeAdapter(lines={"R"})
     assert a.manifest.validate() == []

@@ -107,6 +107,18 @@ class MTARealtimeAdapter(Adapter):
 TRANSFER_WALK_S = 120       # platform-to-platform walk at a transfer
 
 
+def next_departures(trips: list[dict], line: str, from_id: str, to_id: str,
+                    now_epoch: int, n: int = 3) -> list[int]:
+    """Next n departures at from_id, direction-filtered: only trips that go on
+    to reach to_id (so the platform across the street doesn't count)."""
+    deps = sorted({t["stops"][from_id] for t in trips
+                   if t["route"] == line
+                   and t["stops"].get(from_id) and t["stops"].get(to_id)
+                   and t["stops"][to_id] > t["stops"][from_id]
+                   and t["stops"][from_id] >= now_epoch})
+    return deps[:n]
+
+
 def live_chain(legs: list[dict], trips: list[dict],
                now_epoch: int) -> dict | None:
     """Ride the next available train through each leg in order.
