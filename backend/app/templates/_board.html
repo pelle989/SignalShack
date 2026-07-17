@@ -135,19 +135,21 @@
     <tr><td>Dir</td>{% for h in forecast.hours %}<td>{{ h.dir or '–' }}</td>{% endfor %}</tr>
   </table>
   {% else %}
-  <svg class="fxsvg" viewBox="0 0 480 100" preserveAspectRatio="none" aria-label="12-hour temperature, rain chance, cloud cover">
-    {# hour labels on top (trailsnh convention) #}
-    <g font-size="10" fill="#5c6878" text-anchor="middle">{% for l in c.hours %}<text x="{{ l.x }}" y="10">{{ l.text }}</text>{% endfor %}</g>
-    {# cloud ceiling hanging from the hour row — deeper = cloudier #}
-    <polygon points="{{ c.cloud_poly }}" fill="#8b98a9" opacity=".16"/>
-    {# precip bars from the baseline, % labels on wet hours #}
-    <line x1="0" y1="96" x2="480" y2="96" stroke="#1f2937" stroke-width="1"/>
-    <g fill="#5b9dd9" opacity=".35">{% for b in c.bars %}<rect x="{{ b.x }}" y="{{ b.y }}" width="16" height="{{ b.h }}"/>{% endfor %}</g>
-    <g font-size="9" fill="#5b9dd9" text-anchor="middle">{% for p in c.pop_labels %}<text x="{{ p.x }}" y="{{ p.y }}">{{ p.text }}</text>{% endfor %}</g>
-    {# temperature curve with point dots + value labels #}
-    <polyline points="{{ c.temp_points }}" fill="none" stroke="#e0a63d" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-    <g fill="#e0a63d">{% for d in c.dots %}<circle cx="{{ d.x }}" cy="{{ d.y }}" r="2.4"/>{% endfor %}</g>
+  {# Chartist-style line chart, layered like trailsnh's #wxsvg #}
+  <svg class="fxsvg" viewBox="0 0 480 102" preserveAspectRatio="none" aria-label="12-hour temperature, rain chance, cloud cover, wind">
+    <g class="ct-grids" stroke="#1f2937" stroke-width="1">
+      {% for gy in c.grid_y %}<line x1="8" y1="{{ gy }}" x2="472" y2="{{ gy }}"/>{% endfor %}
+      {% for s in c.day_seps %}<line x1="{{ s.x }}" y1="12" x2="{{ s.x }}" y2="88" stroke="#2a3a4d"/>{% endfor %}
+    </g>
+    {% for s in c.day_seps %}<text x="{{ s.x + 4 }}" y="10" font-size="10" fill="#5c6878">{{ s.text }}</text>{% endfor %}
+    <path class="series-cloud" d="{{ c.cloud_path }}" fill="#8b98a9" opacity=".18" stroke="none"/>
+    <path class="series-pop" d="{{ c.pop_path }}" fill="#5b9dd9" opacity=".25" stroke="#5b9dd9" stroke-width="1"/>
+    <path class="series-wind" d="{{ c.wind_path }}" fill="none" stroke="#6b7a8c" stroke-width="1.2"/>
+    <path class="series-wind-gust" d="{{ c.gust_path }}" fill="none" stroke="#6b7a8c" stroke-width="1" stroke-dasharray="3 3" opacity=".7"/>
+    <path class="series-temp" d="{{ c.temp_path }}" fill="none" stroke="#e0a63d" stroke-width="2" stroke-linecap="round"/>
+    <g fill="#e0a63d">{% for d in c.dots %}<circle cx="{{ d.x }}" cy="{{ d.y }}" r="2.2"/>{% endfor %}</g>
     <g font-size="10.5" fill="#e8edf4" font-weight="600" text-anchor="middle">{% for t in c.temp_labels %}<text x="{{ t.x }}" y="{{ t.y }}">{{ t.text }}</text>{% endfor %}</g>
+    <g class="ct-labels" font-size="10" fill="#5c6878" text-anchor="middle">{% for l in c.hours %}<text x="{{ l.x }}" y="100">{{ l.text }}</text>{% endfor %}</g>
   </svg>
   <svg class="fxsvg wind" viewBox="0 0 480 30" preserveAspectRatio="none" aria-label="wind speed, gusts, direction">
     <g font-size="10.5" fill="#8b98a9"><text x="4" y="12" fill="#5c6878">wind</text>{% for w in c.winds %}<text x="{{ w.x }}" y="12"{% if w.hot %} fill="#e0a63d" font-weight="600"{% endif %}>{{ w.text }}</text>{% endfor %}</g>

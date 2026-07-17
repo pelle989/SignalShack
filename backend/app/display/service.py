@@ -394,6 +394,7 @@ def _forecast_grid(hourly: dict, today_iso: str, now_h: int) -> dict | None:
         hours.append({
             "label": ("12A" if h == 0 else f"{h}A" if h < 12
                       else "12P" if h == 12 else f"{h - 12}P"),
+            "date": hourly["time"][i][:10],
             "temp": g("temperature_2m", i),
             "feels": g("apparent_temperature", i),
             "pop": g("precipitation_probability", i),
@@ -412,50 +413,75 @@ _DIR_ARROWS = {"N": "↓", "NE": "↙", "E": "←", "SE": "↖",
                "S": "↑", "SW": "↗", "W": "→", "NW": "↘"}
 
 
+def _smooth_path(pts: list[tuple], close_to: float | None = None) -> str:
+    """Catmull-Rom -> cubic bezier, Chartist's smooth-line look. close_to:
+    drop to that baseline y and close (area series like cloud/pop)."""
+    if not pts:
+        return ""
+    d = f"M{pts[0][0]},{pts[0][1]}"
+    for i in range(1, len(pts)):
+        p0 = pts[i - 2] if i >= 2 else pts[i - 1]
+        p1, p2 = pts[i - 1], pts[i]
+        p3 = pts[i + 1] if i + 1 < len(pts) else p2
+        d += (f" C{p1[0] + (p2[0] - p0[0]) / 6:.1f},"
+              f"{p1[1] + (p2[1] - p0[1]) / 6:.1f}"
+              f" {p2[0] - (p3[0] - p1[0]) / 6:.1f},"
+              f"{p2[1] - (p3[1] - p1[1]) / 6:.1f} {p2[0]},{p2[1]}")
+    if close_to is not None:
+        d += f" L{pts[-1][0]},{close_to} L{pts[0][0]},{close_to} Z"
+    return d
+
+
+# chart frame (Chartist-style: grid area, baseline, top)
+_CH_TOP, _CH_BASE, _CH_STEP = 12, 88, 40
+
+
 def _forecast_chart(hours: list[dict]) -> dict | None:
-    """Render-ready SVG geometry, trailsnh conventions (480×100 viewBox):
-    hour labels on TOP, gray cloud-ceiling area hanging from them, temp curve
-    with point dots + value labels, blue precip bars with % labels; wind rows
-    in a second strip."""
-    xs = [8 + i * 40 for i in range(len(hours))]     # slot origin; center +8
-    temps = [h["temp"] for h in hours]
-    known = [t for t in temps if t is not None]
-    if not known:
+    """Chartist-faithful geometry (verified against trailsnh's #wxsvg):
+    horizontal gridlines, smooth AREA series from the baseline (cloud gray,
+    pop blue), smooth temp LINE with point dots — all on one 0-100 y-axis
+    (°F shares the percent scale, the trailsnh trick) — day-separator lines
+    where the date changes, hour labels below."""
+    xs = [16 + i * _CH_STEP for i in range(len(hours))]
+
+    def vy(v):        # value 0-100 -> chart y
+        v = max(0, min(100, v))
+        return round(_CH_BASE - v / 100 * (_CH_BASE - _CH_TOP), 1)
+
+    temps = [(x, h["temp"]) for x, h in zip(xs, hours, strict=True)
+             if h["temp"] is not None]
+    if not temps:
         return None
-    lo_v, hi_v = min(known), max(known)
-    span = (hi_v - lo_v) or 1
-
-    def ty(t):        # temp band: y 42 (hottest) .. 74 (coldest)
-        return round(74 - (t - lo_v) / span * 32, 1)
-
-    # cloud ceiling: filled polygon hanging from y=14, depth = cloud %
-    ceiling = [f"{x + 8},{round(14 + (h['cloud'] or 0) * .16, 1)}"
-               for x, h in zip(xs, hours, strict=True)]
-    cloud_poly = f"8,14 {' '.join(ceiling)} {xs[-1] + 8},14"
-
+    temp_pts = [(x, vy(t)) for x, t in temps]
     chart = {
-        "hours": [{"x": xs[i] + 8, "text": hours[i]["label"]}
-                  for i in range(0, len(hours), 2)],
-        "cloud_poly": cloud_poly,
-        "temp_points": " ".join(f"{x + 8},{ty(t)}"
-                                for x, t in zip(xs, temps, strict=True)
-                                if t is not None),
-        "dots": [{"x": x + 8, "y": ty(t)}
-                 for x, t in zip(xs, temps, strict=True) if t is not None],
-        "temp_labels": [{"x": xs[i] + 8, "y": ty(temps[i]) - 6,
-                         "text": f"{temps[i]:.0f}"}
+        "grid_y": [_CH_BASE - i * (_CH_BASE - _CH_TOP) / 4 for i in range(5)],
+        "cloud_path": _smooth_path(
+            [(x, vy(h["cloud"] or 0)) for x, h in zip(xs, hours, strict=True)],
+            close_to=_CH_BASE),
+        "pop_path": _smooth_path(
+            [(x, vy(h["pop"] or 0)) for x, h in zip(xs, hours, strict=True)],
+            close_to=_CH_BASE),
+        "temp_path": _smooth_path(temp_pts),
+        "dots": [{"x": x, "y": y} for x, y in temp_pts],
+        "temp_labels": [{"x": xs[i], "y": vy(hours[i]["temp"]) - 6,
+                         "text": f"{hours[i]['temp']:.0f}"}
                         for i in range(0, len(hours), 2)
-                        if temps[i] is not None],
-        "bars": [{"x": x, "y": round(96 - (h["pop"] or 0) * .18, 1),
-                  "h": round((h["pop"] or 0) * .18, 1)}
-                 for x, h in zip(xs, hours, strict=True)],
-        "pop_labels": [{"x": xs[i] + 8,
-                        "y": round(96 - (hours[i]["pop"] or 0) * .18, 1) - 2,
-                        "text": f"{hours[i]['pop']:.0f}"}
-                       for i in range(len(hours))
-                       if (hours[i]["pop"] or 0) >= 20],
-        "winds": [], "dirs": [],
+                        if hours[i]["temp"] is not None],
+        "wind_path": _smooth_path(
+            [(x, vy(h["wind"])) for x, h in zip(xs, hours, strict=True)
+             if h["wind"] is not None]),
+        "gust_path": _smooth_path(
+            [(x, vy(h["gust"])) for x, h in zip(xs, hours, strict=True)
+             if h["gust"] is not None]),
+        "hours": [{"x": xs[i], "text": hours[i]["label"]}
+                  for i in range(0, len(hours), 2)],
+        "day_seps": [], "winds": [], "dirs": [],
     }
+    for i in range(1, len(hours)):
+        if hours[i].get("date") and hours[i]["date"] != hours[i - 1].get("date"):
+            chart["day_seps"].append({
+                "x": xs[i] - _CH_STEP // 2,
+                "text": date.fromisoformat(hours[i]["date"]).strftime("%A")})
     for i in range(1, len(hours), 2):
         h = hours[i]
         if h["wind"] is None:
@@ -463,11 +489,11 @@ def _forecast_chart(hours: list[dict]) -> dict | None:
         g = h["gust"]
         gusty = g is not None and (g - h["wind"] >= 8 or g >= 20)
         chart["winds"].append({
-            "x": xs[i], "hot": g is not None and g >= 30,
+            "x": xs[i] - 12, "hot": g is not None and g >= 30,
             "text": f"{h['wind']:.0f}" + (f" g {g:.0f}" if gusty else "")})
         if h["dir"]:
             chart["dirs"].append(
-                {"x": xs[i], "text": f"{h['dir']} {_DIR_ARROWS[h['dir']]}"})
+                {"x": xs[i] - 12, "text": f"{h['dir']} {_DIR_ARROWS[h['dir']]}"})
     return chart
 
 

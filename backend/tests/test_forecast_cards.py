@@ -37,16 +37,24 @@ def test_forecast_grid_next_12_hours():
     assert grid["hours"][5]["label"] == "12P"
     assert grid["hours"][0]["dir"] == "W"                # 270°
     assert grid["hours"][0]["temp"] is not None
-    # trailsnh-style chart geometry, server-rendered
+    # Chartist-faithful geometry (verified against trailsnh's #wxsvg)
     c = grid["chart"]
-    assert len(c["temp_points"].split()) == 12
-    assert len(c["dots"]) == 12 and len(c["bars"]) == 12
+    assert len(c["grid_y"]) == 5                         # horizontal gridlines
+    assert c["cloud_path"].startswith("M") and "C" in c["cloud_path"]  # smooth
+    assert c["cloud_path"].rstrip().endswith("Z")        # area closed to base
+    assert c["pop_path"].rstrip().endswith("Z")
+    assert "Z" not in c["temp_path"]                     # temp is a LINE
+    assert len(c["dots"]) == 12
     assert len(c["temp_labels"]) == 6 and len(c["hours"]) == 6   # every 2h
-    assert c["cloud_poly"].startswith("8,14")            # ceiling polygon
+    assert c["wind_path"] and c["gust_path"]
     assert c["dirs"][0]["text"] == "W →"                 # arrow = blowing toward
     assert all(w["text"] for w in c["winds"])
-    # storm-afternoon pops (70%) get % labels; dry hours don't
-    assert any(p["text"] == "70" for p in c["pop_labels"])
+    # 7A start crosses no midnight: no day separator; 8P start would
+    assert c["day_seps"] == []
+    night = _forecast_grid(payload_with_outlook()["hourly"],
+                           DAY.isoformat(), 20)
+    assert night["chart"]["day_seps"][0]["text"] == (
+        DAY + timedelta(days=1)).strftime("%A")
 
 
 def test_forecast_grid_tolerates_old_snapshots():
@@ -83,7 +91,8 @@ def test_board_integration_and_layout(tmp_path, monkeypatch):
     tpl = templates.env.get_template("_board.html")
     html = tpl.render(**ctx, csrf="x")
     assert "Next 12 hours" in html and "Next 7 days" in html
-    assert "<polyline" in html and "<polygon" in html    # curve + cloud ceiling
+    assert 'class="series-temp"' in html and 'class="series-cloud"' in html
+    assert 'class="ct-grids"' in html                    # Chartist framework
     assert "ol-ic" in html                               # outlook icons
 
 
@@ -133,4 +142,4 @@ def test_forecast_style_toggle(tmp_path, monkeypatch):
     assert ctx["forecast_style"] == "table"
     from app.main import templates
     html = templates.env.get_template("_board.html").render(**ctx, csrf="x")
-    assert "Rain %" in html and "<polyline" not in html
+    assert "Rain %" in html and "series-temp" not in html
