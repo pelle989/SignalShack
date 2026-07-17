@@ -85,7 +85,14 @@
            color:var(--faint);font-size:1.4vh;display:inline-flex;flex:none;
            align-items:center;justify-content:center;opacity:.5}
   .t-live{color:var(--green);font-weight:600;font-size:1.5vh;
-          text-transform:uppercase;letter-spacing:.08em}
+          text-transform:uppercase;letter-spacing:.08em;
+          position:relative;padding-left:1.5vh}
+  .t-live::before,.t-live::after{content:"";position:absolute;left:0;top:50%;
+      width:.9vh;height:.9vh;margin-top:-.45vh;border-radius:50%;
+      background:var(--green)}
+  .t-live::after{animation:ping 2.2s cubic-bezier(0,0,.2,1) infinite}
+  @keyframes ping{0%{transform:scale(1);opacity:.8}
+                  70%,100%{transform:scale(2.6);opacity:0}}
   .t-legname{font-size:2.1vh}
   .t-legjoin{font-size:1.6vh;color:var(--faint);padding:.2vh 0 .2vh 4.6vh;
              border-left:2px dotted var(--edge);margin-left:1vh}

@@ -96,6 +96,12 @@ def _active_adapters(conn) -> tuple:
     key = secrets.retrieve(conn, "airnow") if secrets.exists(conn, "airnow") else None
     if key:
         adapters.append(AirNowAdapter(api_key=key))
+    pkey = (secrets.retrieve(conn, "google_pollen")
+            if secrets.exists(conn, "google_pollen") else None)
+    if pkey and conn.execute("SELECT 1 FROM monitor WHERE adapter='pollen'"
+                             " LIMIT 1").fetchone():
+        from app.adapters.google_pollen import GooglePollenAdapter
+        adapters.append(GooglePollenAdapter(api_key=pkey))
     return tuple(adapters)
 
 

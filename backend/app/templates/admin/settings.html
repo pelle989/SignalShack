@@ -48,4 +48,33 @@
     <button type="submit">Save key</button>
   </form>
 </div>
+{% set ptypes = pollen_types if pollen_types is defined and pollen_types else [] %}
+<h2>Pollen (Google)</h2>
+<div class="card">
+  {% if pollen_configured %}
+  <p class="ok">Key configured{% if ptypes %} — watching {{ ptypes | sort | join(', ') | lower }} pollen.{% else %} — pick which pollen to watch below.{% endif %}</p>
+  <p class="dim">Paste a new key to replace it, or submit blank to remove.</p>
+  {% else %}
+  <p class="dim">Needs a Google Maps Platform key with the Pollen API enabled
+  (free tier covers a household easily). Sloppy pastes are fine.</p>
+  {% endif %}
+  <form method="post" action="/admin/settings/pollen">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <label>Google Pollen API key</label>
+    <input type="text" name="api_key" autocomplete="off">
+    <button type="submit">Save key</button>
+  </form>
+  {% if pollen_configured %}
+  <form method="post" action="/admin/settings/pollen/types" style="margin-top:12px">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <label>Watch these pollen types</label>
+    <label style="display:inline-flex;gap:6px;margin-right:14px"><input type="checkbox" name="ptype" value="TREE" {% if 'TREE' in ptypes %}checked{% endif %}> Tree</label>
+    <label style="display:inline-flex;gap:6px;margin-right:14px"><input type="checkbox" name="ptype" value="GRASS" {% if 'GRASS' in ptypes %}checked{% endif %}> Grass</label>
+    <label style="display:inline-flex;gap:6px;margin-right:14px"><input type="checkbox" name="ptype" value="WEED" {% if 'WEED' in ptypes %}checked{% endif %}> Weed (ragweed)</label>
+    <button type="submit">Save pollen types</button>
+  </form>
+  <p class="dim" style="margin-top:4px">The Pollen card appears once at least
+  one type is checked, and hides itself out of season (index 0 across the board).</p>
+  {% endif %}
+</div>
 {% endblock %}

@@ -93,6 +93,24 @@
   <div class="stamp">AirNow (US EPA) · {{ air.stamp }}</div>
 </div>
 
+{% elif card == 'pollen' %}
+<div class="card{% if primary %} primary{% endif %}{% if pollen.attention == 'amber' %} attn-amber{% endif %}">
+  <h2>Pollen</h2>
+  {% if not pollen.rows %}
+    <div class="empty">Waiting for first reading…</div>
+  {% else %}
+    {% for p in pollen.rows %}
+    <div class="t-row">
+      <span class="t-name">{{ p.label }}</span>
+      <span class="t-st" style="color:{% if p.index >= 4 %}var(--amber){% elif p.index >= 3 %}var(--text){% else %}var(--green){% endif %}">{{ p.category }}{% if p.index %} · {{ p.index }}{% endif %}</span>
+    </div>
+    <div class="t-detail">{{ p.meaning | capitalize }}</div>
+    {% endfor %}
+  {% endif %}
+  {% if pollen.state == 'stale' %}<div class="empty warn">Reading may be outdated.</div>{% endif %}
+  <div class="stamp">Google Pollen · {{ pollen.stamp }}</div>
+</div>
+
 {% elif card == 'tomorrow' %}
 <div class="tomorrow-strip">
   <span><b>Tomorrow:</b> {{ tomorrow.text }}</span>

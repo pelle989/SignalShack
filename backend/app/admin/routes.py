@@ -418,7 +418,55 @@ async def settings_page(request: Request):
             return guard
         return _render(request, "settings.html", guard,
                        settings=config_mgr.get_settings(conn),
-                       airnow_configured=secrets.exists(conn, "airnow"))
+                       airnow_configured=secrets.exists(conn, "airnow"),
+                       pollen_configured=secrets.exists(conn, "google_pollen"),
+                       pollen_types=_pollen_types(conn))
+    finally:
+        conn.close()
+
+
+def _pollen_types(conn) -> set[str]:
+    return {r["field"] for r in conn.execute(
+        "SELECT field FROM monitor WHERE adapter='pollen'").fetchall()}
+
+
+@router.post("/settings/pollen")
+async def pollen_key(request: Request, api_key: str = Form(""),
+                     csrf: str = Form(None)):
+    conn = db.connect()
+    try:
+        guard = _guard(request, conn)
+        if isinstance(guard, RedirectResponse):
+            return guard
+        if security.check_csrf(guard, csrf):
+            key = secrets.clean_pasted_key(api_key)
+            if key:
+                secrets.store(conn, "google_pollen", key,
+                              label="Google Pollen API key")
+            else:
+                secrets.delete(conn, "google_pollen")   # blank submit = remove
+        return RedirectResponse("/admin/settings", status_code=303)
+    finally:
+        conn.close()
+
+
+@router.post("/settings/pollen/types")
+async def pollen_types(request: Request, csrf: str = Form(None)):
+    from app.adapters.google_pollen import TYPES
+    conn = db.connect()
+    try:
+        guard = _guard(request, conn)
+        if isinstance(guard, RedirectResponse):
+            return guard
+        if security.check_csrf(guard, csrf):
+            form = await request.form()
+            wanted = set(form.getlist("ptype")) & set(TYPES)
+            with conn:
+                conn.execute("DELETE FROM monitor WHERE adapter='pollen'")
+                for t in sorted(wanted):
+                    conn.execute("INSERT INTO monitor (adapter, field)"
+                                 " VALUES ('pollen', ?)", (t,))
+        return RedirectResponse("/admin/settings", status_code=303)
     finally:
         conn.close()
 
@@ -503,6 +551,7 @@ async def privacy_page(request: Request):
 
 CARD_LABELS = {"weather": "Weather Meaning", "alerts": "NWS Alerts",
                "transit": "Transit lines", "air": "Air Quality",
+               "pollen": "Pollen",
                "announcements": "Household announcements",
                "tomorrow": "Tomorrow strip"}
 

@@ -283,6 +283,35 @@ def compose_board(conn: sqlite3.Connection, now: datetime | None = None) -> dict
             air.update({"aqi": None, "meaning": None})
         ctx["air"] = air
 
+    # ---- pollen card (V1.2 slice 1): key + at least one watched type.
+    # Fresh all-zero (out of season) => card rests; stale zeros still show.
+    ctx["pollen"] = None
+    ptypes = [r["field"] for r in conn.execute(
+        "SELECT field FROM monitor WHERE adapter='pollen'"
+        " ORDER BY field").fetchall()]
+    if ptypes and secrets.exists(conn, "google_pollen"):
+        from app.adapters.google_pollen import TYPE_LABELS, GooglePollenAdapter
+        gp = GooglePollenAdapter.manifest
+        p_snap = snapshots.latest(conn, loc["id"], "google_pollen")
+        p_state = snapshots.freshness(p_snap and p_snap["fetched_at"],
+                                      gp.poll_seconds_fresh,
+                                      gp.stale_after_seconds, now)
+        rows = []
+        if p_snap:
+            norm = GooglePollenAdapter().normalize(p_snap["payload"])
+            for t in ptypes:
+                info = norm["types"][t]
+                rows.append({"type": t, "label": TYPE_LABELS[t], **info,
+                             "attention": "amber" if info["index"] >= 4 else None})
+        pollen = {"state": p_state, "rows": rows,
+                  "attention": ("amber" if any(r["index"] >= 4 for r in rows)
+                                else None),
+                  "stamp": snapshots.stamp(p_snap and p_snap["fetched_at"],
+                                           p_state)}
+        if p_state == "fresh" and rows and all(r["index"] == 0 for r in rows):
+            pollen = None                    # out of season — card rests
+        ctx["pollen"] = pollen
+
     # ---- announcements
     rows = conn.execute(
         "SELECT text, priority FROM announcement WHERE expires_at IS NULL OR expires_at > ?"

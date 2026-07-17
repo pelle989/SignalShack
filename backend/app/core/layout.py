@@ -9,7 +9,8 @@ never surprise a household (invariant 1 in spirit).
 import json
 import sqlite3
 
-CARD_TYPES = ["weather", "alerts", "transit", "air", "announcements", "tomorrow"]
+CARD_TYPES = ["weather", "alerts", "transit", "air", "pollen",
+              "announcements", "tomorrow"]
 DEFAULT = [{"type": t, "enabled": True} for t in CARD_TYPES]
 
 
@@ -68,6 +69,8 @@ def visible_order(conn: sqlite3.Connection, ctx: dict) -> list[str]:
                                            or ctx.get("transit_routes")):
             continue
         if c["type"] == "air" and ctx.get("air") is None:
+            continue
+        if c["type"] == "pollen" and ctx.get("pollen") is None:
             continue
         if c["type"] == "tomorrow" and ctx.get("tomorrow") is None:
             continue
