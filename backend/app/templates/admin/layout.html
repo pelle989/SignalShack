@@ -52,4 +52,17 @@
     <button type="submit">Save style</button>
   </form>
 </div>
+<h2>Forecast range</h2>
+<div class="card">
+  <form method="post" action="/admin/layout/forecast-horizon">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <label style="display:block;margin-bottom:6px"><input type="radio" name="hours" value="12" {% if forecast_horizon == 12 %}checked{% endif %}>
+      <b>12 hours</b> <span class="dim">— hour-by-hour detail, wind row and dots.</span></label>
+    <label style="display:block;margin-bottom:6px"><input type="radio" name="hours" value="48" {% if forecast_horizon == 48 %}checked{% endif %}>
+      <b>48 hours</b> <span class="dim">— two days at a glance, fits the card.</span></label>
+    <label style="display:block;margin-bottom:6px"><input type="radio" name="hours" value="72" {% if forecast_horizon == 72 %}checked{% endif %}>
+      <b>72 hours</b> <span class="dim">— three days; the chart slowly pans across the extra day and loops.</span></label>
+    <button type="submit">Save range</button>
+  </form>
+</div>
 {% endblock %}

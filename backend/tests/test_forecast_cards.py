@@ -75,6 +75,10 @@ def test_outlook_seven_days_confidence_fade():
     assert [d["conf"] for d in days] == ["high"] * 4 + ["medium", "low", "low"]
     assert days[0]["word"] == "Rain"                     # WMO 61
     assert days[0]["pop"] == 30                          # tomorrow = index 8
+    # accuracy band: consecutive same-confidence days grouped, tier -> %
+    band = out["accuracy"]
+    assert [(b["pct"], b["span"]) for b in band] == [(90, 4), (70, 1), (50, 2)]
+    assert sum(b["span"] for b in band) == 7             # covers every column
 
 
 def test_outlook_none_on_short_daily():
@@ -97,6 +101,9 @@ def test_board_integration_and_layout(tmp_path, monkeypatch):
     assert 'class="series-temp"' in html and 'class="series-cloud"' in html
     assert 'class="ct-grids"' in html                    # Chartist framework
     assert "ol-ic" in html                               # outlook icons
+    # accuracy graphic replaced the old prose caveat
+    assert "fade for a reason" not in html
+    assert 'class="ol-acc"' in html and "90%" in html and "50%" in html
 
 
 def test_rain_when_am_pm_split():
@@ -146,3 +153,91 @@ def test_forecast_style_toggle(tmp_path, monkeypatch):
     from app.main import templates
     html = templates.env.get_template("_board.html").render(**ctx, csrf="x")
     assert "Rain %" in html and "series-temp" not in html
+
+
+def _long_hourly(day, n_days=5):
+    """Hourly block long enough to exercise the 72h horizon (n_days ahead)."""
+    days = [(day + timedelta(days=i)).isoformat() for i in range(n_days)]
+    hours = [f"{d}T{h:02d}:00" for d in days for h in range(24)]
+    m = len(hours)
+    return {
+        "time": hours,
+        "temperature_2m": [70 + (h % 12) for _ in days for h in range(24)],
+        "apparent_temperature": [72 + (h % 12) for _ in days for h in range(24)],
+        "precipitation_probability": [20] * m,
+        "precipitation": [0.0] * m,
+        "snowfall": [0.0] * m,
+        "weather_code": [2] * m,
+        "cloud_cover": [40] * m,
+        "dew_point_2m": [60] * m,
+        "wind_speed_10m": [10] * m,
+        "wind_gusts_10m": [18] * m,
+        "wind_direction_10m": [270] * m,
+        "uv_index": [5] * m,
+    }
+
+
+def test_forecast_horizon_setting(tmp_path, monkeypatch):
+    from app.core import layout
+    conn = setup_conn(tmp_path, monkeypatch)
+    with conn:
+        conn.execute("INSERT INTO board (name, is_default, layout_json)"
+                     " VALUES ('Default', 1, '{}')")
+    assert layout.get_forecast_horizon(conn) == 12            # default
+    layout.set_forecast_horizon(conn, 72)
+    assert layout.get_forecast_horizon(conn) == 72
+    layout.set_forecast_horizon(conn, 9999)                   # invalid: ignored
+    assert layout.get_forecast_horizon(conn) == 72
+    # unrelated setters must not clobber the horizon (the old bug)
+    layout.set_forecast_style(conn, "table")
+    layout.set_density(conn, "compact")
+    layout.move(conn, "alerts", "up")
+    assert layout.get_forecast_horizon(conn) == 72
+    assert layout.get_forecast_style(conn) == "table"         # nor vice-versa
+
+
+def test_forecast_grid_horizons():
+    hourly = _long_hourly(DAY)
+    g12 = _forecast_grid(hourly, DAY.isoformat(), 7, 12)
+    g48 = _forecast_grid(hourly, DAY.isoformat(), 7, 48)
+    g72 = _forecast_grid(hourly, DAY.isoformat(), 7, 72)
+    assert len(g12["hours"]) == 12 and g12["horizon"] == 12
+    assert len(g48["hours"]) == 48 and g48["horizon"] == 48
+    assert len(g72["hours"]) == 72 and g72["horizon"] == 72
+    # 12h & 48h fit their window (no pan); 72h overflows and pans ~one day
+    assert g12["chart"]["scroll"] == 0
+    assert g48["chart"]["scroll"] == 0
+    assert g72["chart"]["scroll"] > 0
+    assert g72["chart"]["content_w"] > 480                    # wider than window
+
+
+def test_forecast_chart_dense_vs_detail():
+    hourly = _long_hourly(DAY)
+    detail = _forecast_grid(hourly, DAY.isoformat(), 7, 12)["chart"]
+    dense = _forecast_grid(hourly, DAY.isoformat(), 7, 72)["chart"]
+    # detail (12h): hourly dots + numeric wind row + labels every 2h
+    assert len(detail["dots"]) == 12 and detail["winds"]
+    assert len(detail["hours"]) == 6
+    # dense (48/72h): no dots/wind row (unreadable), labels thinned to every 6h
+    assert dense["dots"] == [] and dense["winds"] == []
+    assert len(dense["hours"]) == 12                          # 72 / 6
+    assert dense["day_seps"]                                  # day boundaries kept
+
+
+def test_72h_board_renders_scrolling_chart(tmp_path, monkeypatch):
+    from app.core import layout
+    conn = setup_conn(tmp_path, monkeypatch)
+    with conn:
+        conn.execute("INSERT INTO board (name, is_default, layout_json)"
+                     " VALUES ('Default', 1, '{}')")
+    p = {"hourly": _long_hourly(DAY), "daily": payload_with_outlook()["daily"]}
+    snapshots.save(conn, 1, "open_meteo", p, now=NOW)
+    layout.set_forecast_horizon(conn, 72)
+    ctx = compose_board(conn, now=NOW)
+    assert ctx["forecast_horizon"] == 72
+    assert ctx["forecast"]["horizon"] == 72
+    from app.main import templates
+    html = templates.env.get_template("_board.html").render(**ctx, csrf="x")
+    assert "Next 72 hours" in html
+    assert 'class="fx-scroll"' in html
+    assert 'data-scroll="0"' not in html                      # a real pan value

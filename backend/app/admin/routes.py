@@ -589,7 +589,9 @@ async def layout_page(request: Request):
         return _render(request, "layout.html", guard, cards=cards,
                        density=layout.get_density(conn),
                        densities=layout.DENSITIES,
-                       forecast_style=layout.get_forecast_style(conn))
+                       forecast_style=layout.get_forecast_style(conn),
+                       forecast_horizon=layout.get_forecast_horizon(conn),
+                       forecast_horizons=layout.FORECAST_HORIZONS)
     finally:
         conn.close()
 
@@ -604,6 +606,24 @@ async def layout_forecast_style(request: Request, style: str = Form(""),
             return guard
         if security.check_csrf(guard, csrf):
             layout.set_forecast_style(conn, style)
+        return RedirectResponse("/admin/layout", status_code=303)
+    finally:
+        conn.close()
+
+
+@router.post("/layout/forecast-horizon")
+async def layout_forecast_horizon(request: Request, hours: str = Form(""),
+                                  csrf: str = Form(None)):
+    conn = db.connect()
+    try:
+        guard = _guard(request, conn)
+        if isinstance(guard, RedirectResponse):
+            return guard
+        if security.check_csrf(guard, csrf):
+            try:
+                layout.set_forecast_horizon(conn, int(hours))
+            except (TypeError, ValueError):
+                pass
         return RedirectResponse("/admin/layout", status_code=303)
     finally:
         conn.close()

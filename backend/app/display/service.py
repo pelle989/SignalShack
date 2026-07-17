@@ -122,7 +122,8 @@ def compose_board(conn: sqlite3.Connection, now: datetime | None = None) -> dict
             except (KeyError, ValueError):
                 ctx["tomorrow"] = None
             ctx["forecast"] = _forecast_grid(om_snap["payload"]["hourly"],
-                                             today, now.hour)
+                                             today, now.hour,
+                                             layout.get_forecast_horizon(conn))
             ctx["outlook"] = _outlook(om_snap["payload"]["daily"], today,
                                       om_snap["payload"]["hourly"])
             _fire_caps(conn, [f.rule_id for f in fired
@@ -360,6 +361,7 @@ def compose_board(conn: sqlite3.Connection, now: datetime | None = None) -> dict
     ctx["layout"] = layout.visible_order(conn, ctx)
     ctx["density"] = layout.get_density(conn)
     ctx["forecast_style"] = layout.get_forecast_style(conn)
+    ctx["forecast_horizon"] = layout.get_forecast_horizon(conn)
     ctx["pip"] = _pip(ctx)
     return ctx
 
@@ -376,8 +378,15 @@ _WMO_WORDS = {0: "Clear", 1: "Mostly sun", 2: "Part cloudy", 3: "Cloudy",
               95: "Storms", 96: "Storms", 99: "Storms"}
 
 
-def _forecast_grid(hourly: dict, today_iso: str, now_h: int) -> dict | None:
-    """Next 12 hours as grid columns (trailsnh-style, plan approval)."""
+# horizon (total hours) -> hours visible in the window at once. 72h shows a
+# 48h window and pans across the extra day; 12/48 fit their window statically.
+_HORIZON_WINDOW = {12: 12, 48: 48, 72: 48}
+
+
+def _forecast_grid(hourly: dict, today_iso: str, now_h: int,
+                   hours_n: int = 12) -> dict | None:
+    """Next N hours as grid columns (trailsnh-style, plan approval).
+    hours_n is the admin-chosen horizon (12/48/72)."""
     try:
         start = hourly["time"].index(f"{today_iso}T{now_h:02d}:00")
     except (KeyError, ValueError):
@@ -388,7 +397,7 @@ def _forecast_grid(hourly: dict, today_iso: str, now_h: int) -> dict | None:
         return series[i] if series and i < len(series) else None
 
     hours = []
-    for i in range(start, min(start + 12, len(hourly["time"]))):
+    for i in range(start, min(start + hours_n, len(hourly["time"]))):
         h = int(hourly["time"][i][11:13])
         wd = g("wind_direction_10m", i)
         hours.append({
@@ -405,7 +414,9 @@ def _forecast_grid(hourly: dict, today_iso: str, now_h: int) -> dict | None:
         })
     if not hours:
         return None
-    return {"hours": hours, "chart": _forecast_chart(hours)}
+    hpw = _HORIZON_WINDOW.get(hours_n, len(hours))
+    return {"hours": hours, "horizon": hours_n,
+            "chart": _forecast_chart(hours, hpw)}
 
 
 # arrow = direction the wind blows TOWARD (mockup convention: "W →")
@@ -432,8 +443,12 @@ def _smooth_path(pts: list[tuple], close_to: float | None = None) -> str:
     return d
 
 
-# chart frame (Chartist-style: grid area, baseline, top)
-_CH_TOP, _CH_BASE, _CH_STEP = 12, 88, 40
+# chart frame (Chartist-style: grid area, baseline, top). The svg viewBox is
+# 480 wide = the visible WINDOW; _CH_LEFT is the y-axis gutter, _CH_RIGHT a
+# breathing margin. Point spacing (step) is derived per-horizon so a window's
+# worth of hours fills the plot; wider horizons (72h) overflow and pan.
+_CH_TOP, _CH_BASE = 12, 88
+_CH_LEFT, _CH_RIGHT, _CH_W = 18, 22, 480
 
 
 def _extreme_labels(pts: list[tuple], vals: list) -> list[dict]:
@@ -453,19 +468,32 @@ def _extreme_labels(pts: list[tuple], vals: list) -> list[dict]:
             continue                     # plateau: one label is enough
         last_val = vals[i]
         is_min = vals[i] <= min(vals[max(0, i - 1)], vals[min(n - 1, i + 1)])
+        # endpoints anchor inward so they clear the y-axis gutter (left) and
+        # the window edge (right); interior labels stay centred on the point
+        anchor = "start" if i == 0 else "end" if i == n - 1 else "middle"
         out.append({"x": pts[i][0],
                     "y": pts[i][1] + 13 if is_min else pts[i][1] - 6,
-                    "text": f"{vals[i]:.0f}°"})
+                    "text": f"{vals[i]:.0f}°", "anchor": anchor})
     return out
 
 
-def _forecast_chart(hours: list[dict]) -> dict | None:
+def _forecast_chart(hours: list[dict], hpw: int | None = None) -> dict | None:
     """Chartist-faithful geometry (verified against trailsnh's #wxsvg):
     horizontal gridlines, smooth AREA series from the baseline (cloud gray,
     pop blue), smooth temp LINE with point dots — all on one 0-100 y-axis
     (°F shares the percent scale, the trailsnh trick) — day-separator lines
-    where the date changes, hour labels below."""
-    xs = [16 + i * _CH_STEP for i in range(len(hours))]
+    where the date changes, hour labels below.
+
+    hpw = hours visible per window. Point spacing fills the plot with hpw
+    hours; when len(hours) > hpw the content overflows the 480-wide window
+    and `scroll` is the pan distance (in user units) the display animates."""
+    n = len(hours)
+    hpw = hpw or n
+    plot_w = _CH_W - _CH_LEFT - _CH_RIGHT
+    step = plot_w / max(hpw - 1, 1)
+    xs = [round(_CH_LEFT + i * step, 1) for i in range(n)]
+    dense = hpw > 12                      # 48/72h: thin labels, drop dots/rows
+    lab_every = 6 if dense else 2
 
     def vy(v):        # value 0-100 -> chart y
         v = max(0, min(100, v))
@@ -485,7 +513,8 @@ def _forecast_chart(hours: list[dict]) -> dict | None:
             [(x, vy(h["pop"] or 0)) for x, h in zip(xs, hours, strict=True)],
             close_to=_CH_BASE),
         "temp_path": _smooth_path(temp_pts),
-        "dots": [{"x": x, "y": y} for x, y in temp_pts],
+        # hourly dots only when spacing is generous (12h); they'd smear at 48/72
+        "dots": [] if dense else [{"x": x, "y": y} for x, y in temp_pts],
         "temp_labels": _extreme_labels(temp_pts, [t for _, t in temps]),
         "wind_path": _smooth_path(
             [(x, vy(h["wind"])) for x, h in zip(xs, hours, strict=True)
@@ -494,26 +523,32 @@ def _forecast_chart(hours: list[dict]) -> dict | None:
             [(x, vy(h["gust"])) for x, h in zip(xs, hours, strict=True)
              if h["gust"] is not None]),
         "hours": [{"x": xs[i], "text": hours[i]["label"]}
-                  for i in range(0, len(hours), 2)],
+                  for i in range(0, n, lab_every)],
         "day_seps": [], "winds": [], "dirs": [],
+        # pan distance: extra hours beyond the window, in user units
+        "scroll": round(max(0, n - hpw) * step, 1),
+        "content_w": round(_CH_LEFT + (n - 1) * step + _CH_RIGHT, 1),
     }
-    for i in range(1, len(hours)):
+    for i in range(1, n):
         if hours[i].get("date") and hours[i]["date"] != hours[i - 1].get("date"):
             chart["day_seps"].append({
-                "x": xs[i] - _CH_STEP // 2,
+                "x": round(xs[i] - step / 2, 1),
                 "text": date.fromisoformat(hours[i]["date"]).strftime("%A")})
-    for i in range(1, len(hours), 2):
-        h = hours[i]
-        if h["wind"] is None:
-            continue
-        g = h["gust"]
-        gusty = g is not None and (g - h["wind"] >= 8 or g >= 20)
-        chart["winds"].append({
-            "x": xs[i] - 12, "hot": g is not None and g >= 30,
-            "text": f"{h['wind']:.0f}" + (f" g {g:.0f}" if gusty else "")})
-        if h["dir"]:
-            chart["dirs"].append(
-                {"x": xs[i] - 12, "text": f"{h['dir']} {_DIR_ARROWS[h['dir']]}"})
+    # numeric wind/dir row only in detail (12h) mode — too dense to read at 48/72
+    if not dense:
+        for i in range(1, n, lab_every):
+            h = hours[i]
+            if h["wind"] is None:
+                continue
+            g = h["gust"]
+            gusty = g is not None and (g - h["wind"] >= 8 or g >= 20)
+            chart["winds"].append({
+                "x": xs[i] - 12, "hot": g is not None and g >= 30,
+                "text": f"{h['wind']:.0f}" + (f" g {g:.0f}" if gusty else "")})
+            if h["dir"]:
+                chart["dirs"].append(
+                    {"x": xs[i] - 12,
+                     "text": f"{h['dir']} {_DIR_ARROWS[h['dir']]}"})
     return chart
 
 
@@ -584,7 +619,28 @@ def _outlook(daily: dict, today_iso: str, hourly: dict | None = None) -> dict | 
             "rain_when": _rain_when(hourly, day_iso) if hourly else None,
             "conf": "high" if ahead <= 4 else "medium" if ahead == 5 else "low",
         })
-    return {"days": days} if len(days) >= 2 else None   # 1 day = tomorrow strip's job
+    if len(days) < 2:                   # 1 day = tomorrow strip's job
+        return None
+    return {"days": days, "accuracy": _accuracy_band(days)}
+
+
+# how confident the outlook is, per tier — replaces the old prose caveat with
+# an honest number (typical multi-day forecast skill, matches the plan's fade)
+_CONF_PCT = {"high": 90, "medium": 70, "low": 50}
+
+
+def _accuracy_band(days: list[dict]) -> list[dict]:
+    """Group consecutive days of equal confidence into labelled segments so the
+    board can draw one accuracy bar aligned under the day columns. span = how
+    many day-columns the segment covers; pct = that tier's accuracy."""
+    band = []
+    for d in days:
+        pct = _CONF_PCT[d["conf"]]
+        if band and band[-1]["conf"] == d["conf"]:
+            band[-1]["span"] += 1
+        else:
+            band.append({"conf": d["conf"], "pct": pct, "span": 1})
+    return band
 
 
 def get_live_fields(conn: sqlite3.Connection,

@@ -122,7 +122,7 @@
 
 {% elif card == 'forecast' %}
 <div class="card">
-  <h2>Next 12 hours</h2>
+  <h2>Next {{ forecast.horizon or 12 }} hours</h2>
   {% set c = forecast.chart %}
   {% if forecast_style == 'table' or not c %}
   <table class="fx">
@@ -139,39 +139,49 @@
   {# Chartist-style line chart, trailsnh palette adapted to the dark board:
      sky gradient · gray cloud · GREEN rain chance · yellow wind (dashed =
      gusts) · bright temp line (their black) #}
-  <svg class="fxsvg" viewBox="0 0 480 102" preserveAspectRatio="none" aria-label="12-hour temperature, rain chance, cloud cover, wind">
+  <svg class="fxsvg" viewBox="0 0 480 102" preserveAspectRatio="none" aria-label="temperature, rain chance, cloud cover, wind over the next {{ forecast.horizon or 12 }} hours">
     <defs>
       <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
         <stop offset="0" stop-color="#2b4a7a" stop-opacity=".15"/>
         <stop offset="1" stop-color="#2b4a7a" stop-opacity=".45"/>
       </linearGradient>
     </defs>
-    <rect x="8" y="12" width="464" height="76" fill="url(#sky)"/>
+    {# fixed backdrop: sky + horizontal value gridlines span the visible window #}
+    <rect x="18" y="12" width="456" height="76" fill="url(#sky)"/>
     <g class="ct-grids" stroke="#3a4a5d" stroke-width="1" stroke-dasharray="2 4">
-      {% for gy in c.grid_y %}<line x1="8" y1="{{ gy }}" x2="472" y2="{{ gy }}"/>{% endfor %}
-      {% for s in c.day_seps %}<line x1="{{ s.x }}" y1="12" x2="{{ s.x }}" y2="88" stroke-dasharray="none"/>{% endfor %}
+      {% for gy in c.grid_y %}<line x1="18" y1="{{ gy }}" x2="474" y2="{{ gy }}"/>{% endfor %}
     </g>
-    <g font-size="8" fill="#5c6878" text-anchor="end"><text x="7" y="15">100</text><text x="7" y="53">50</text><text x="7" y="90">0</text></g>
-    {% for s in c.day_seps %}<text x="{{ s.x + 4 }}" y="10" font-size="10" fill="#5c6878">{{ s.text }}</text>{% endfor %}
-    <path class="series-cloud" d="{{ c.cloud_path }}" fill="#8b98a9" opacity=".38" stroke="none"/>
-    <path class="series-pop" d="{{ c.pop_path }}" fill="#4caf50" opacity=".22" stroke="#4caf50" stroke-width="1.6"/>
-    <path class="series-wind" d="{{ c.wind_path }}" fill="none" stroke="#d8d867" stroke-width="1" opacity=".75"/>
-    <path class="series-wind-gust" d="{{ c.gust_path }}" fill="none" stroke="#e3e36a" stroke-width="1.2" stroke-dasharray="4 3" opacity=".85"/>
-    <path class="series-temp" d="{{ c.temp_path }}" fill="none" stroke="#e8edf4" stroke-width="2.2" stroke-linecap="round"/>
-    <g fill="#e8edf4">{% for d in c.dots %}<circle cx="{{ d.x }}" cy="{{ d.y }}" r="2"/>{% endfor %}</g>
-    <g font-size="10.5" fill="#e8edf4" font-weight="600" text-anchor="middle">{% for t in c.temp_labels %}<text x="{{ t.x }}" y="{{ t.y }}">{{ t.text }}</text>{% endfor %}</g>
-    <g class="ct-labels" font-size="10" fill="#5c6878" text-anchor="middle">{% for l in c.hours %}<text x="{{ l.x }}" y="100">{{ l.text }}</text>{% endfor %}</g>
+    {# scrolling layer: everything time-anchored pans together for 72h #}
+    <g class="fx-scroll" data-scroll="{{ c.scroll }}">
+      <g stroke="#3a4a5d" stroke-width="1">
+        {% for s in c.day_seps %}<line x1="{{ s.x }}" y1="12" x2="{{ s.x }}" y2="88"/>{% endfor %}
+      </g>
+      {% for s in c.day_seps %}<text x="{{ s.x + 4 }}" y="10" font-size="10" fill="#5c6878">{{ s.text }}</text>{% endfor %}
+      <path class="series-cloud" d="{{ c.cloud_path }}" fill="#8b98a9" opacity=".38" stroke="none"/>
+      <path class="series-pop" d="{{ c.pop_path }}" fill="#4caf50" opacity=".22" stroke="#4caf50" stroke-width="1.6"/>
+      <path class="series-wind" d="{{ c.wind_path }}" fill="none" stroke="#d8d867" stroke-width="1" opacity=".75"/>
+      <path class="series-wind-gust" d="{{ c.gust_path }}" fill="none" stroke="#e3e36a" stroke-width="1.2" stroke-dasharray="4 3" opacity=".85"/>
+      <path class="series-temp" d="{{ c.temp_path }}" fill="none" stroke="#e8edf4" stroke-width="2.2" stroke-linecap="round"/>
+      <g fill="#e8edf4">{% for d in c.dots %}<circle cx="{{ d.x }}" cy="{{ d.y }}" r="2"/>{% endfor %}</g>
+      <g font-size="10.5" fill="#e8edf4" font-weight="600" text-anchor="middle">{% for t in c.temp_labels %}<text x="{{ t.x }}" y="{{ t.y }}" text-anchor="{{ t.anchor }}">{{ t.text }}</text>{% endfor %}</g>
+      <g class="ct-labels" font-size="10" fill="#5c6878" text-anchor="middle">{% for l in c.hours %}<text x="{{ l.x }}" y="100">{{ l.text }}</text>{% endfor %}</g>
+    </g>
+    {# fixed y-axis gutter drawn last so the scrolling series never slides over it #}
+    <rect x="0" y="0" width="18" height="92" fill="#161d27"/>
+    <g font-size="8" fill="#5c6878" text-anchor="start"><text x="2" y="15">100</text><text x="2" y="53">50</text><text x="2" y="90">0</text></g>
   </svg>
   <div class="fx-legend">
     <span><i style="background:#e8edf4"></i>temp</span>
     <span><i style="background:#4caf50"></i>rain %</span>
     <span><i style="background:#8b98a9;opacity:.6"></i>clouds</span>
-    <span><i style="background:#d8d867"></i>wind <em>(4 g 13 = 4 mph, gusts 13)</em></span>
+    <span><i style="background:#d8d867"></i>wind{% if c.winds %} <em>(4 g 13 = 4 mph, gusts 13)</em>{% endif %}</span>
   </div>
+  {% if c.winds %}
   <svg class="fxsvg wind" viewBox="0 0 480 30" preserveAspectRatio="none" aria-label="wind speed, gusts, direction">
     <g font-size="10.5" fill="#8b98a9"><text x="4" y="12" fill="#5c6878">wind</text>{% for w in c.winds %}<text x="{{ w.x }}" y="12"{% if w.hot %} fill="#e0a63d" font-weight="600"{% endif %}>{{ w.text }}</text>{% endfor %}</g>
     <g font-size="10.5" fill="#5c6878"><text x="4" y="26">dir</text>{% for dd in c.dirs %}<text x="{{ dd.x }}" y="26">{{ dd.text }}</text>{% endfor %}</g>
   </svg>
+  {% endif %}
   {% endif %}
   <div class="stamp">Open-Meteo · {{ stamp_weather }}</div>
 </div>
@@ -190,7 +200,17 @@
     </div>
     {% endfor %}
   </div>
-  <div class="ol-note">Days 5–7 fade for a reason — treat them as a trend, not a plan.</div>
+  {% if outlook.accuracy %}
+  <div class="ol-acc-cap">Forecast accuracy</div>
+  <div class="ol-acc" role="img" aria-label="Forecast accuracy fades from {{ outlook.accuracy[0].pct }}% to {{ outlook.accuracy[-1].pct }}% over the week">
+    {% for a in outlook.accuracy %}
+    <div class="ol-acc-seg {{ a.conf }}" style="flex-grow:{{ a.span }}">
+      <div class="ol-acc-bar" style="height:{{ a.pct }}%"></div>
+      <span class="ol-acc-pct">{{ a.pct }}%</span>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
   <div class="stamp">Open-Meteo · {{ stamp_weather }}</div>
 </div>
 

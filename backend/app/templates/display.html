@@ -138,7 +138,22 @@
            overflow:hidden;text-overflow:ellipsis}
   .ol-t{font-size:1.5vh;color:var(--dim)} .ol-t b{color:var(--text)}
   .ol-pop{font-size:1.2vh;color:var(--faint);margin-top:.2vh;min-height:1.4vh}
-  .ol-note{font-size:1.2vh;color:var(--faint);margin-top:.6vh}
+  .ol-acc-cap{font-size:1.1vh;color:var(--faint);margin-top:.6vh;
+              text-transform:uppercase;letter-spacing:.1em}
+  /* segmented accuracy bar — each segment spans its confidence tier's days and
+     its fill height encodes the tier's accuracy (90/70/50), so certainty is
+     visibly stepping down across the week */
+  .ol-acc{display:flex;height:3vh;margin-top:.3vh;border:1px solid var(--edge);
+          border-radius:6px;overflow:hidden;background:#10161f}
+  .ol-acc-seg{position:relative;display:flex;align-items:flex-end;
+              justify-content:center;border-left:1px solid var(--edge)}
+  .ol-acc-seg:first-child{border-left:none}
+  .ol-acc-bar{position:absolute;left:0;right:0;bottom:0;
+              background:rgba(91,157,217,.42)}
+  .ol-acc-seg.medium .ol-acc-bar{background:rgba(91,157,217,.30)}
+  .ol-acc-seg.low .ol-acc-bar{background:rgba(91,157,217,.20)}
+  .ol-acc-pct{position:relative;font-size:1.5vh;font-weight:600;
+              color:var(--text);padding-bottom:.3vh}
 
   /* density presets (admin → Layout → Board density) */
   #board.compact{grid-template-columns:repeat(3,1fr)}
@@ -174,6 +189,30 @@
     document.body.classList.toggle("night", mins >= 22 * 60 || mins < 5 * 60 + 30);
   }
   tick(); setInterval(tick, 1000);
+
+  // 72h forecast pan: hold 7s, scroll 10s, hold 7s, repeat. Driven off the
+  // wall clock and re-read each frame so the 20s board refresh (which
+  // replaces the chart node) never resets or stutters the animation.
+  const FX_HOLD = 7000, FX_SCROLL = 10000, FX_CYCLE = FX_HOLD + FX_SCROLL + FX_HOLD;
+  function fxPan(){
+    const el = document.querySelector(".fx-scroll");
+    if (el){
+      const dx = parseFloat(el.getAttribute("data-scroll") || "0");
+      if (dx > 0){
+        const t = Date.now() % FX_CYCLE;
+        let off = 0;                                   // hold at start
+        if (t >= FX_HOLD && t < FX_HOLD + FX_SCROLL)   // scrolling
+          off = dx * (t - FX_HOLD) / FX_SCROLL;
+        else if (t >= FX_HOLD + FX_SCROLL)             // hold at end
+          off = dx;
+        el.setAttribute("transform", "translate(" + (-off).toFixed(1) + " 0)");
+      } else if (el.hasAttribute("transform")){
+        el.removeAttribute("transform");               // 12h/48h: no pan
+      }
+    }
+    requestAnimationFrame(fxPan);
+  }
+  requestAnimationFrame(fxPan);
 </script>
 </body>
 </html>
