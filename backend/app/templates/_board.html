@@ -53,15 +53,20 @@
 
   {% if transit and transit_routes %}<div class="t-section">Routes</div>{% endif %}
   {% for r in transit_routes %}
-  <div class="t-row">
-    <span class="t-name">{{ r.name }}
-      <span class="t-seg">·
-      {%- for leg in r.legs %} {{ leg.line }} {{ leg.from_name }} → {{ leg.to_name }}
-        <span style="color:{% if leg.status == 'good' %}var(--green){% elif leg.attention == 'red' %}var(--red){% elif leg.attention == 'amber' %}var(--amber){% else %}var(--dim){% endif %}">{{ leg.label }}</span>
-        {%- if not loop.last %} ·{% endif %}
-      {%- endfor %}</span>
-    </span>
-    <span class="t-st" style="color:{% if r.status == 'good' %}var(--green){% elif r.attention == 'red' %}var(--red){% elif r.attention == 'amber' %}var(--amber){% else %}var(--dim){% endif %}">{{ r.label }}</span>
+  <div class="t-row t-route">
+    <div class="t-legs">
+      <div class="t-name">{{ r.name }}</div>
+      {% for leg in r.legs %}
+      <div class="t-leg">
+        <span class="t-legno">{{ loop.index }}</span>
+        <span class="bullet" style="background:{{ leg.color }};{% if leg.dark_text %}color:#111{% endif %}">{{ leg.line }}</span>
+        <span class="t-legname">{{ leg.from_name }} → {{ leg.to_name }}</span>
+        <span class="t-st" style="color:{% if leg.status == 'good' %}var(--green){% elif leg.attention == 'red' %}var(--red){% elif leg.attention == 'amber' %}var(--amber){% else %}var(--dim){% endif %}">{{ leg.label }}</span>
+      </div>
+      {% if not loop.last %}<div class="t-legjoin">transfer at {{ leg.to_name }}</div>{% endif %}
+      {% endfor %}
+    </div>
+    <span class="t-st" style="padding-top:.4vh;color:{% if r.status == 'good' %}var(--green){% elif r.attention == 'red' %}var(--red){% elif r.attention == 'amber' %}var(--amber){% else %}var(--dim){% endif %}">{{ r.label }}</span>
   </div>
   {% endfor %}
 
