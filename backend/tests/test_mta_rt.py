@@ -34,6 +34,9 @@ def test_live_chain_rides_next_available_trains():
     assert est["depart_epoch"] == T0 + 300
     assert est["arrive_epoch"] == T0 + 1440
     assert est["total_min"] == 19                    # (1440-300)/60
+    # per-leg picks computed for EVERY leg, before the total
+    assert [lg["ride_min"] for lg in est["legs"]] == [6, 10]
+    assert est["legs"][1]["depart"] >= est["legs"][0]["arrive"] + 120
 
 
 def test_live_chain_skips_departed_trains():
@@ -73,6 +76,9 @@ def test_board_shows_live_estimate_when_fresh(tmp_path, monkeypatch):
     assert route["live"]["total_min"] == 19
     assert route["live"]["depart_label"] == "7:35"
     assert route["est_min"] == 21                    # scheduled kept alongside
+    # per-leg live ride times on each row
+    assert [(lg["ride_min"], lg.get("ride_live")) for lg in route["legs"]] \
+        == [(6, True), (10, True)]
 
 
 def test_board_falls_back_to_scheduled_when_rt_stale(tmp_path, monkeypatch):
@@ -87,6 +93,9 @@ def test_board_falls_back_to_scheduled_when_rt_stale(tmp_path, monkeypatch):
     route = ctx["transit_routes"][0]
     assert route["live"] is None
     assert route["est_min"] == 21
+    # legs fall back to scheduled ride times, unmarked as live
+    assert [(lg["ride_min"], lg.get("ride_live")) for lg in route["legs"]] \
+        == [(6, None), (10, None)]
 
 
 def test_scheduler_polls_rt_for_chain_lines_only(tmp_path, monkeypatch):

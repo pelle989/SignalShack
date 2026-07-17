@@ -113,7 +113,7 @@ def live_chain(legs: list[dict], trips: list[dict],
     legs: [{line, from_id, to_id}, ...] (commute_profile legs_json shape).
     Returns {"total_min", "depart_epoch", "arrive_epoch"} or None if any leg
     has no usable upcoming trip (caller falls back to scheduled estimate)."""
-    cursor, depart_first = now_epoch, None
+    cursor, depart_first, leg_times = now_epoch, None, []
     for leg in legs:
         best = None                                    # (dep, arr)
         for t in trips:
@@ -129,7 +129,10 @@ def live_chain(legs: list[dict], trips: list[dict],
             return None
         if depart_first is None:
             depart_first = best[0]
+        leg_times.append({"depart": best[0], "arrive": best[1],
+                          "ride_min": round((best[1] - best[0]) / 60)})
         cursor = best[1] + TRANSFER_WALK_S
     arrive = cursor - TRANSFER_WALK_S
     return {"total_min": round((arrive - depart_first) / 60),
-            "depart_epoch": depart_first, "arrive_epoch": arrive}
+            "depart_epoch": depart_first, "arrive_epoch": arrive,
+            "legs": leg_times}

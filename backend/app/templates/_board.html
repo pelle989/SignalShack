@@ -61,7 +61,10 @@
         <span class="t-legno">{{ loop.index }}</span>
         <span class="bullet" style="background:{{ leg.color }};{% if leg.dark_text %}color:#111{% endif %}">{{ leg.line }}</span>
         <span class="t-legname">{{ leg.from_name }} → {{ leg.to_name }}</span>
-        <span class="t-st" style="color:{% if leg.status == 'good' %}var(--green){% elif leg.attention == 'red' %}var(--red){% elif leg.attention == 'amber' %}var(--amber){% else %}var(--dim){% endif %}">{{ leg.label }}</span>
+        <span class="t-stwrap">
+          {% if leg.ride_min %}<span class="t-ride">~{{ leg.ride_min }} min{% if not leg.ride_live %} sched{% endif %}</span>{% endif %}
+          <span class="t-st" style="color:{% if leg.status == 'good' %}var(--green){% elif leg.attention == 'red' %}var(--red){% elif leg.attention == 'amber' %}var(--amber){% else %}var(--dim){% endif %}">{{ leg.label }}</span>
+        </span>
       </div>
       {% if leg.status != 'good' and leg.headline %}<div class="t-detail">{{ leg.headline }}</div>{% endif %}
       {% if not loop.last %}<div class="t-legjoin">transfer at {{ leg.to_name }}</div>{% endif %}

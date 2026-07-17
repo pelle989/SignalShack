@@ -200,6 +200,7 @@ def compose_board(conn: sqlite3.Connection, now: datetime | None = None) -> dict
                     timed = False
                 else:
                     ride_s += s
+                v["ride_min"] = round(s / 60) if s else None   # scheduled default
                 legs.append(v)
             # scheduled total: ride time + transfer buffer per change.
             # HONEST LABEL: timetable estimate, not live — GTFS-RT is C2 slice 3.
@@ -209,6 +210,9 @@ def compose_board(conn: sqlite3.Connection, now: datetime | None = None) -> dict
                         key=STATUS_RANK.index, default="good")
             live = live_chain(cfg_legs, trips, int(now.timestamp())) if trips else None
             if live:
+                # per-leg live ride times replace the scheduled defaults
+                for v, lt in zip(legs, live["legs"], strict=True):
+                    v["ride_min"], v["ride_live"] = lt["ride_min"], True
                 live = {"total_min": live["total_min"],
                         "depart_label": datetime.fromtimestamp(
                             live["depart_epoch"]).strftime("%-I:%M")}
