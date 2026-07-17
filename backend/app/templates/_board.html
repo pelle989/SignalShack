@@ -40,7 +40,6 @@
 <div class="card{% if primary %} primary{% endif %}{% if s.attention == 'red' %} attn-red{% elif s.attention == 'amber' %} attn-amber{% endif %}">
   <h2>Transit</h2>
   <div class="line-status {{ 'ok' if s.status == 'good' else 'late' if s.attention == 'amber' else 'bad' if s.attention == 'red' else 'dim' }}">{{ s.headline }}</div>
-  {% if s.sub %}<div class="line-head">{{ s.sub }}</div>{% endif %}
 
   {% if transit and transit_routes %}<div class="t-section">Lines</div>{% endif %}
   {% for t in transit %}
@@ -49,13 +48,14 @@
     <span class="t-name">{{ 'LIRR' if t.line == 'LIRR' else 'Metro-North' if t.line == 'MNR' else t.line ~ ' Train' }}{% if t.segment_label %} <span class="t-seg">· {{ t.segment_label }}</span>{% endif %}</span>
     <span class="t-st" style="color:{% if t.status == 'good' %}var(--green){% elif t.attention == 'red' %}var(--red){% elif t.attention == 'amber' %}var(--amber){% else %}var(--dim){% endif %}">{{ t.label }}</span>
   </div>
+  {% if t.status != 'good' and t.headline %}<div class="t-detail">{{ t.headline }}</div>{% endif %}
   {% endfor %}
 
   {% if transit and transit_routes %}<div class="t-section">Routes</div>{% endif %}
   {% for r in transit_routes %}
   <div class="t-row t-route">
     <div class="t-legs">
-      <div class="t-name">{{ r.name }}</div>
+      <div class="t-name">{{ r.name }}{% if r.est_min %} <span class="t-seg">· ~{{ r.est_min }} min scheduled</span>{% endif %}</div>
       {% for leg in r.legs %}
       <div class="t-leg">
         <span class="t-legno">{{ loop.index }}</span>
@@ -63,6 +63,7 @@
         <span class="t-legname">{{ leg.from_name }} → {{ leg.to_name }}</span>
         <span class="t-st" style="color:{% if leg.status == 'good' %}var(--green){% elif leg.attention == 'red' %}var(--red){% elif leg.attention == 'amber' %}var(--amber){% else %}var(--dim){% endif %}">{{ leg.label }}</span>
       </div>
+      {% if leg.status != 'good' and leg.headline %}<div class="t-detail">{{ leg.headline }}</div>{% endif %}
       {% if not loop.last %}<div class="t-legjoin">transfer at {{ leg.to_name }}</div>{% endif %}
       {% endfor %}
     </div>

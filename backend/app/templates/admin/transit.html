@@ -106,15 +106,18 @@
 </div>
 <script src="/static/htmx.min.js"></script>
 
-{% if not has_dataset %}
 <h2>Stop data</h2>
 <div class="card">
+  {% if has_dataset %}
+  <p class="dim">Refresh if the MTA changes stops, or to pick up new features
+  (scheduled travel times for chained routes need a refresh).</p>
+  {% else %}
   <p class="dim">One-time download from the MTA (~40 MB, a minute or two).
-  Enables between-stops monitoring, and powers route features later.</p>
+  Enables between-stops monitoring, chained routes, and travel times.</p>
+  {% endif %}
   <form method="post" action="/admin/transit/gtfs">
     <input type="hidden" name="csrf" value="{{ csrf }}">
-    <button type="submit">Download stop data</button>
+    <button type="submit">{{ 'Refresh stop data' if has_dataset else 'Download stop data' }}</button>
   </form>
 </div>
-{% endif %}
 {% endblock %}

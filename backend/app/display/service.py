@@ -22,6 +22,7 @@ from app.rules.engine import compose, evaluate
 SEEDS = json.loads(
     (Path(__file__).parents[1] / "rules" / "seeds.json").read_text())["rules"]
 OM, NWS = OpenMeteoAdapter.manifest, NWSAdapter.manifest
+TRANSFER_BUFFER_MIN = 5     # scheduled chain estimate: buffer per transfer
 
 
 def _rule_enabled(conn, seed_id: str) -> bool:
@@ -178,15 +179,25 @@ def compose_board(conn: sqlite3.Connection, now: datetime | None = None) -> dict
         normalized = MTAAdapter().normalize(mta_snap["payload"]) if mta_snap else {}
         for r in route_rows:
             legs = []
+            ride_s, timed = 0, True
             for leg in json.loads(r["legs_json"] or "[]"):
                 segment = gtfs.segment_ids(leg["line"], leg["from_id"], leg["to_id"])
                 v = line_view(leg["line"], normalized, segment=segment)
                 v["from_name"], v["to_name"] = leg["from_name"], leg["to_name"]
+                s = gtfs.travel_seconds(leg["line"], leg["from_id"], leg["to_id"])
+                if s is None:               # dataset predates time capture
+                    timed = False
+                else:
+                    ride_s += s
                 legs.append(v)
+            # scheduled total: ride time + transfer buffer per change.
+            # HONEST LABEL: timetable estimate, not live — GTFS-RT is C2 slice 3.
+            est_min = (round(ride_s / 60) + TRANSFER_BUFFER_MIN * (len(legs) - 1)
+                       if timed and legs else None)
             worst = min((leg["status"] for leg in legs),
                         key=STATUS_RANK.index, default="good")
             route = {"name": r["name"], "legs": legs, "state": t_state,
-                     "status": worst,
+                     "est_min": est_min, "status": worst,
                      "label": {"good": "✓ All clear", "delays": "Delays en route",
                                "service_change": "Service change en route",
                                "planned_work": "Planned work en route",
@@ -224,10 +235,15 @@ def compose_board(conn: sqlite3.Connection, now: datetime | None = None) -> dict
                        "headline": f"{disp}{where} — {worst['label']}",
                        "sub": worst.get("headline", "")}
         else:
+            # name the culprit LEG — the route row below already shows the
+            # combined verdict, so repeating it in big type adds nothing
+            bad = min(worst["legs"],
+                      key=lambda leg: STATUS_RANK.index(leg["status"]))
             summary = {"status": worst["status"],
                        "attention": worst["attention"], "stale": stale,
-                       "headline": f"{worst['name']} — {worst['label']}",
-                       "sub": ""}
+                       "headline": f"{worst['name']} — {bad['line']} leg"
+                                   f" {bad['label'].lower()}",
+                       "sub": bad.get("headline", "")}
         ctx["transit_summary"] = summary
 
     # ---- air quality card (V1.1): appears once an AirNow key is stored

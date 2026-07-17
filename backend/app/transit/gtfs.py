@@ -44,6 +44,16 @@ def stops_for(route_id: str) -> list[dict]:
     return (data or {}).get("routes", {}).get(route_id, [])
 
 
+def travel_seconds(route_id: str, from_id: str, to_id: str) -> int | None:
+    """Scheduled travel time between two stops (timetable, not live).
+    None if unknown or the dataset predates time capture (pre-refresh)."""
+    times = {s["id"]: s.get("t") for s in stops_for(route_id)}
+    a, b = times.get(from_id), times.get(to_id)
+    if a is None or b is None:
+        return None
+    return abs(b - a)
+
+
 def segment_ids(route_id: str, from_id: str, to_id: str) -> set[str] | None:
     """Parent stop ids between from/to inclusive, direction-agnostic.
     None if the dataset or stops are unknown (caller falls back to line-wide)."""
@@ -55,6 +65,15 @@ def segment_ids(route_id: str, from_id: str, to_id: str) -> set[str] | None:
         return None
     lo, hi = min(a, b), max(a, b)
     return set(order[lo:hi + 1])
+
+
+def _secs(hms: str | None) -> int | None:
+    """GTFS 'HH:MM:SS' (may exceed 24h) -> seconds. None if malformed."""
+    try:
+        h, m, s = (int(p) for p in (hms or "").split(":"))
+        return h * 3600 + m * 60 + s
+    except ValueError:
+        return None
 
 
 def build_dataset(timeout: int = 120) -> dict:
@@ -96,25 +115,29 @@ def build_dataset(timeout: int = 120) -> dict:
             best[route] = tid
     chosen = set(best.values())
 
-    # pass 2: collect sequences for chosen trips
-    seqs: dict[str, list[tuple[int, str]]] = {t: [] for t in chosen}
+    # pass 2: collect sequences (+ scheduled arrival offsets) for chosen trips
+    seqs: dict[str, list[tuple[int, str, int | None]]] = {t: [] for t in chosen}
     with zf.open("stop_times.txt") as f:
         reader = csv.DictReader(io.TextIOWrapper(f, "utf-8-sig"))
         for row in reader:
             tid = row["trip_id"]
             if tid in chosen:
                 seqs[tid].append((int(row["stop_sequence"]),
-                                  parent(row["stop_id"])))
+                                  parent(row["stop_id"]),
+                                  _secs(row.get("arrival_time"))))
 
     routes: dict[str, list[dict]] = {}
     for route, tid in best.items():
-        ordered = [sid for _, sid in sorted(seqs[tid])]
+        ordered = sorted(seqs[tid])
+        base = next((t for _, _, t in ordered if t is not None), None)
         seen: set[str] = set()
         stops = []
-        for sid in ordered:
+        for _, sid, t in ordered:
             if sid not in seen:
                 seen.add(sid)
-                stops.append({"id": sid, "name": stop_names.get(sid, sid)})
+                stops.append({"id": sid, "name": stop_names.get(sid, sid),
+                              "t": (t - base) if t is not None
+                              and base is not None else None})
         routes[route] = stops
 
     DATA_FILE.parent.mkdir(parents=True, exist_ok=True)
