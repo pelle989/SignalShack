@@ -7,8 +7,9 @@ from app.adapters.weather_derive import derive_fields
 
 HOURLY_VARS = ("temperature_2m,apparent_temperature,precipitation_probability,"
                "precipitation,snowfall,weather_code,cloud_cover,dew_point_2m,"
-               "wind_speed_10m,wind_gusts_10m,uv_index")
-DAILY_VARS = "temperature_2m_max,temperature_2m_min,snowfall_sum,precipitation_sum"
+               "wind_speed_10m,wind_gusts_10m,uv_index,wind_direction_10m")
+DAILY_VARS = ("temperature_2m_max,temperature_2m_min,snowfall_sum,"
+              "precipitation_sum,precipitation_probability_max,weather_code")
 
 
 class OpenMeteoAdapter(Adapter):
@@ -59,7 +60,7 @@ class OpenMeteoAdapter(Adapter):
             "hourly": HOURLY_VARS, "daily": DAILY_VARS,
             "temperature_unit": "fahrenheit", "wind_speed_unit": "mph",
             "precipitation_unit": "inch", "timezone": "auto",
-            "forecast_days": 2, "past_days": 7,
+            "forecast_days": 8, "past_days": 7,   # 8 = today + 7-day outlook
         }
         async with httpx.AsyncClient(timeout=30) as client:
             r = await client.get("https://api.open-meteo.com/v1/forecast", params=params)

@@ -15,7 +15,8 @@ def test_default_layout_and_availability_filter(tmp_path, monkeypatch):
     store_weather(conn, date(2026, 7, 15), fetched_at=now)
     ctx = compose_board(conn, now=now)
     # no monitors, no AirNow key: transit and air filtered out of the order
-    assert ctx["layout"] == ["weather", "alerts", "announcements", "tomorrow"]
+    assert ctx["layout"] == ["weather", "alerts", "announcements", "tomorrow",
+                             "forecast"]
 
 
 def test_configured_cards_join_the_order(tmp_path, monkeypatch):
@@ -31,7 +32,7 @@ def test_configured_cards_join_the_order(tmp_path, monkeypatch):
     secrets.store(conn, "airnow", "k")
     ctx = compose_board(conn, now=now)
     assert ctx["layout"] == ["weather", "alerts", "transit", "air",
-                             "announcements", "tomorrow"]
+                             "announcements", "tomorrow", "forecast"]
 
 
 def test_move_and_toggle_change_composition(tmp_path, monkeypatch):

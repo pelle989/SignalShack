@@ -118,6 +118,39 @@
   <span class="conf">{{ tomorrow.confidence }}</span>
 </div>
 
+{% elif card == 'forecast' %}
+<div class="card fullrow">
+  <h2>Next 12 hours</h2>
+  <table class="fx">
+    <tr class="fx-h"><td></td>{% for h in forecast.hours %}<td>{{ h.label }}</td>{% endfor %}</tr>
+    <tr class="fx-t"><td>Temp</td>{% for h in forecast.hours %}<td>{{ '%.0f'|format(h.temp) ~ '°' if h.temp is not none else '–' }}</td>{% endfor %}</tr>
+    <tr><td>Feels</td>{% for h in forecast.hours %}<td>{{ '%.0f'|format(h.feels) ~ '°' if h.feels is not none else '–' }}</td>{% endfor %}</tr>
+    <tr><td>Rain %</td>{% for h in forecast.hours %}<td{% if h['pop'] and h['pop'] >= 50 %} class="fx-wet"{% endif %}>{{ h['pop'] if h['pop'] is not none else '–' }}</td>{% endfor %}</tr>
+    <tr><td>Cloud %</td>{% for h in forecast.hours %}<td>{{ h.cloud if h.cloud is not none else '–' }}</td>{% endfor %}</tr>
+    <tr><td>Wind</td>{% for h in forecast.hours %}<td>{{ '%.0f'|format(h.wind) if h.wind is not none else '–' }}</td>{% endfor %}</tr>
+    <tr><td>Gusts</td>{% for h in forecast.hours %}<td{% if h.gust and h.gust >= 30 %} class="fx-wet"{% endif %}>{{ '%.0f'|format(h.gust) if h.gust is not none else '–' }}</td>{% endfor %}</tr>
+    <tr><td>Dir</td>{% for h in forecast.hours %}<td>{{ h.dir or '–' }}</td>{% endfor %}</tr>
+  </table>
+  <div class="stamp">Open-Meteo · {{ stamp_weather }}</div>
+</div>
+
+{% elif card == 'outlook' %}
+<div class="card fullrow">
+  <h2>Next 7 days</h2>
+  <div class="ol">
+    {% for d in outlook.days %}
+    <div class="ol-day {{ d.conf }}">
+      <div class="ol-name">{{ d.label }}</div>
+      <div class="ol-word">{{ d.word or '—' }}</div>
+      <div class="ol-t"><b>{{ '%.0f'|format(d.high) if d.high is not none else '–' }}°</b> / {{ '%.0f'|format(d.low) if d.low is not none else '–' }}°</div>
+      <div class="ol-pop">{% if d['pop'] is not none %}{{ d['pop'] }}% rain{% endif %}</div>
+    </div>
+    {% endfor %}
+  </div>
+  <div class="ol-note">Days 5–7 fade for a reason — treat them as a trend, not a plan.</div>
+  <div class="stamp">Open-Meteo · {{ stamp_weather }}</div>
+</div>
+
 {% elif card == 'announcements' %}
 <div class="card{% if primary %} primary{% endif %}">
   <h2>Household</h2>

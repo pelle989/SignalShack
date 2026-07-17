@@ -1,11 +1,11 @@
 {
- "seed_version": 3,
- "note": "24 weather seed rules, backtest-tuned 2026-07-13 (2yr, coastal NY). Spec: seed-rules.md. Fields per the weather adapter's derived-field contract.",
+ "seed_version": 4,
+ "note": "24 weather seed rules, backtest-tuned 2026-07-13, v4 2026-07-17: P1 cool-start gate; temp topic split (heat-safety/cold-safety/humidity/house) so safety rules stop deduping distinct comfort signals (live scorelog finding). Spec: seed-rules.md.",
  "rules": [
   {
    "id": "S1",
    "priority": 98,
-   "topic": "temp",
+   "topic": "cold-safety",
    "months": [
     11,
     12,
@@ -20,7 +20,7 @@
      "value": 0
     }
    ],
-   "output": "Dangerously cold this morning \u2014 feels like {wind_chill_min_morning:.0f}\u00b0. Limit time outside.",
+   "output": "Dangerously cold this morning — feels like {wind_chill_min_morning:.0f}°. Limit time outside.",
    "window_hours": [
     5,
     10
@@ -29,7 +29,7 @@
   {
    "id": "S2",
    "priority": 97,
-   "topic": "temp",
+   "topic": "heat-safety",
    "months": [
     5,
     6,
@@ -44,7 +44,7 @@
      "value": 100
     }
    ],
-   "output": "Dangerous heat today \u2014 feels like {heat_index_max:.0f}\u00b0. Hydrate, limit afternoon exertion.",
+   "output": "Dangerous heat today — feels like {heat_index_max:.0f}°. Hydrate, limit afternoon exertion.",
    "window_hours": [
     10,
     20
@@ -173,7 +173,7 @@
      "value": true
     }
    ],
-   "output": "Freeze tonight ({low_tonight:.0f}\u00b0). Cover plants, disconnect hoses."
+   "output": "Freeze tonight ({low_tonight:.0f}°). Cover plants, disconnect hoses."
   },
   {
    "id": "T5",
@@ -239,20 +239,25 @@
   {
    "id": "P1",
    "priority": 48,
-   "topic": "temp",
+   "topic": "cold-safety",
    "conditions": [
     {
      "field": "temp_swing_today",
      "op": ">=",
      "value": 25
+    },
+    {
+     "field": "temp_min_today",
+     "op": "<=",
+     "value": 55
     }
    ],
-   "output": "Cold start, {high_today:.0f}\u00b0 later \u2014 dress in layers."
+   "output": "Cold start, {high_today:.0f}° later — dress in layers."
   },
   {
    "id": "P2",
    "priority": 52,
-   "topic": "temp",
+   "topic": "cold-safety",
    "conditions": [
     {
      "field": "high_delta_vs_yesterday",
@@ -265,7 +270,7 @@
   {
    "id": "P3",
    "priority": 44,
-   "topic": "temp",
+   "topic": "heat-safety",
    "conditions": [
     {
      "field": "high_delta_vs_yesterday",
@@ -273,7 +278,7 @@
      "value": 12
     }
    ],
-   "output": "Much warmer than yesterday \u2014 {high_today:.0f}\u00b0 this afternoon."
+   "output": "Much warmer than yesterday — {high_today:.0f}° this afternoon."
   },
   {
    "id": "P4",
@@ -306,12 +311,12 @@
      "value": true
     }
    ],
-   "output": "Warmest day in months \u2014 {high_today:.0f}\u00b0 this afternoon."
+   "output": "Warmest day in months — {high_today:.0f}° this afternoon."
   },
   {
    "id": "P6",
    "priority": 34,
-   "topic": "temp",
+   "topic": "humidity",
    "months": [
     5,
     6,
@@ -331,7 +336,7 @@
      "value": 72
     }
    ],
-   "output": "Humid today. It'll feel stickier than {high_today:.0f}\u00b0 sounds."
+   "output": "Humid today. It'll feel stickier than {high_today:.0f}° sounds."
   },
   {
    "id": "P7",
@@ -375,12 +380,12 @@
      "value": 40
     }
    ],
-   "output": "Strong sun today \u2014 sunscreen for anyone outside past a few minutes."
+   "output": "Strong sun today — sunscreen for anyone outside past a few minutes."
   },
   {
    "id": "P9",
    "priority": 46,
-   "topic": "temp",
+   "topic": "house",
    "months": [
     5,
     6,
@@ -388,7 +393,7 @@
     8,
     9
    ],
-   "window": "4\u20139 PM",
+   "window": "4–9 PM",
    "conditions": [
     {
      "field": "temp_evening_min",
@@ -416,7 +421,7 @@
      "value": 6
     }
    ],
-   "output": "Great night to air the house out \u2014 {temp_evening:.0f}\u00b0 and dry by 9.",
+   "output": "Great night to air the house out — {temp_evening:.0f}° and dry by 9.",
    "window_hours": [
     16,
     21
@@ -425,7 +430,7 @@
   {
    "id": "P10",
    "priority": 50,
-   "topic": "temp",
+   "topic": "house",
    "months": [
     5,
     6,
@@ -433,7 +438,7 @@
     8,
     9
    ],
-   "window": "6\u20139 AM",
+   "window": "6–9 AM",
    "conditions": [
     {
      "field": "temp_7am",
@@ -446,7 +451,7 @@
      "value": 86
     }
    ],
-   "output": "Cool now, {high_today:.0f}\u00b0 by afternoon \u2014 close windows before you leave.",
+   "output": "Cool now, {high_today:.0f}° by afternoon — close windows before you leave.",
    "window_hours": [
     6,
     9
@@ -456,7 +461,7 @@
    "id": "A1",
    "priority": 22,
    "topic": "outdoor",
-   "window": "3\u20137 PM",
+   "window": "3–7 PM",
    "max_fires_per_7d": 2,
    "conditions": [
     {
@@ -478,7 +483,7 @@
      "value": 12
     }
    ],
-   "output": "Great evening to be outside \u2014 {temp_evening:.0f}\u00b0 and dry.",
+   "output": "Great evening to be outside — {temp_evening:.0f}° and dry.",
    "window_hours": [
     15,
     19
@@ -488,7 +493,7 @@
    "id": "A2",
    "priority": 14,
    "topic": "outdoor",
-   "window": "6\u201310 PM",
+   "window": "6–10 PM",
    "conditions": [
     {
      "field": "cloud_overnight_max",
@@ -501,7 +506,7 @@
      "value": 40
     }
    ],
-   "output": "Clear skies tonight \u2014 good night for stargazing.",
+   "output": "Clear skies tonight — good night for stargazing.",
    "window_hours": [
     18,
     22
@@ -511,7 +516,7 @@
    "id": "A3",
    "priority": 26,
    "topic": "precip",
-   "window": "5\u201310 AM",
+   "window": "5–10 AM",
    "conditions": [
     {
      "field": "all_day_soaker",

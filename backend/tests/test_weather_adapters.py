@@ -78,6 +78,34 @@ def test_end_to_end_storm_day_composition():
     assert len(secondary) <= 3
 
 
+def test_topic_split_p6_survives_s2(monkeypatch):
+    """v4 scorelog fix: humidity is its own topic — S2 heat-safety firing must
+    no longer dedupe P6 off the board (they shared 'temp' in v3)."""
+    day = date(2026, 7, 14)
+    hourly, daily = synthetic_payload(day, storm_day=False)
+    hourly["apparent_temperature"] = [t + 14 for t in hourly["temperature_2m"]]
+    fields = derive_fields(hourly, daily, day.isoformat(), now_h=6,
+                           season_state={})
+    fields["heat_index_max"] = 101          # force S2
+    fields["dew_max_today"], fields["dew_max_yesterday"] = 74, 70   # force P6
+    fired = [f for r in SEEDS
+             if (f := evaluate(r, fields, month=7)) is not None]
+    ids = {f.rule_id for f in fired}
+    assert {"S2", "P6"} <= ids
+    primary, secondary = compose(fired)
+    kept = {f.rule_id for f in primary + secondary}
+    assert "S2" in kept and "P6" in kept    # both surfaces, different topics
+
+
+def test_p1_cool_start_gate():
+    """v4 scorelog fix: 'dress in layers' needs an actually-cool morning."""
+    p1 = next(r for r in SEEDS if r["id"] == "P1")
+    fields = {"temp_swing_today": 30, "temp_min_today": 75, "high_today": 102}
+    assert evaluate(p1, fields, month=7) is None        # hot morning: absurd
+    fields["temp_min_today"] = 48
+    assert evaluate(p1, fields, month=10) is not None   # cool morning: fires
+
+
 def test_warning_suppression_end_to_end():
     day = date(2026, 7, 14)
     hourly, daily = synthetic_payload(day)

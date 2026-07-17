@@ -68,4 +68,4 @@ def test_board_includes_tomorrow_strip(tmp_path, monkeypatch):
     store_weather(conn, date(2026, 7, 14), fetched_at=now)
     ctx = compose_board(conn, now=now)
     assert ctx["tomorrow"] is not None
-    assert ctx["layout"][-1] == "tomorrow"               # appended last by default
+    assert "tomorrow" in ctx["layout"]                   # present in the order

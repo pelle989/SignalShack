@@ -10,7 +10,7 @@ import json
 import sqlite3
 
 CARD_TYPES = ["weather", "alerts", "transit", "air", "pollen",
-              "announcements", "tomorrow"]
+              "announcements", "tomorrow", "forecast", "outlook"]
 DEFAULT = [{"type": t, "enabled": True} for t in CARD_TYPES]
 
 # board-level density presets — deliberately NOT per-card sizing (3 states to
@@ -95,6 +95,10 @@ def visible_order(conn: sqlite3.Connection, ctx: dict) -> list[str]:
         if c["type"] == "air" and ctx.get("air") is None:
             continue
         if c["type"] == "pollen" and ctx.get("pollen") is None:
+            continue
+        if c["type"] == "forecast" and ctx.get("forecast") is None:
+            continue
+        if c["type"] == "outlook" and ctx.get("outlook") is None:
             continue
         if c["type"] == "tomorrow" and ctx.get("tomorrow") is None:
             continue

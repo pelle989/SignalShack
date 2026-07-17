@@ -571,7 +571,9 @@ CARD_LABELS = {"weather": "Weather Meaning", "alerts": "NWS Alerts",
                "transit": "Transit lines", "air": "Air Quality",
                "pollen": "Pollen",
                "announcements": "Household announcements",
-               "tomorrow": "Tomorrow strip"}
+               "tomorrow": "Tomorrow strip",
+               "forecast": "Forecast grid (next 12 hours)",
+               "outlook": "7-day outlook"}
 
 
 @router.get("/layout", response_class=HTMLResponse)

@@ -57,6 +57,7 @@ def compose_board(conn: sqlite3.Connection, now: datetime | None = None) -> dict
            "alerts_state": "unknown", "alerts": [], "alerts_attention": None,
            "announcements": [], "transit": [], "transit_routes": [],
            "stamp_transit": None, "air": None, "tomorrow": None,
+           "forecast": None, "outlook": None,
            "location_label": loc["label"] if loc else "Home"}
 
     if loc is None:
@@ -120,6 +121,9 @@ def compose_board(conn: sqlite3.Connection, now: datetime | None = None) -> dict
                                                   om_snap["payload"]["daily"], today)
             except (KeyError, ValueError):
                 ctx["tomorrow"] = None
+            ctx["forecast"] = _forecast_grid(om_snap["payload"]["hourly"],
+                                             today, now.hour)
+            ctx["outlook"] = _outlook(om_snap["payload"]["daily"], today)
             _fire_caps(conn, [f.rule_id for f in fired
                               if any(s.get("max_fires_per_7d") and s["id"] == f.rule_id
                                      for s in SEEDS)], today)
@@ -331,6 +335,74 @@ def compose_board(conn: sqlite3.Connection, now: datetime | None = None) -> dict
     ctx["density"] = layout.get_density(conn)
     ctx["pip"] = _pip(ctx)
     return ctx
+
+
+_COMPASS = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"]
+
+# WMO weather codes -> one glanceable word (outlook strip)
+_WMO_WORDS = {0: "Clear", 1: "Mostly sun", 2: "Part cloudy", 3: "Cloudy",
+              45: "Fog", 48: "Fog", 51: "Drizzle", 53: "Drizzle", 55: "Drizzle",
+              56: "Icy drizzle", 57: "Icy drizzle", 61: "Rain", 63: "Rain",
+              65: "Rain", 66: "Icy rain", 67: "Icy rain", 71: "Snow",
+              73: "Snow", 75: "Snow", 77: "Snow", 80: "Showers", 81: "Showers",
+              82: "Showers", 85: "Snow showers", 86: "Snow showers",
+              95: "Storms", 96: "Storms", 99: "Storms"}
+
+
+def _forecast_grid(hourly: dict, today_iso: str, now_h: int) -> dict | None:
+    """Next 12 hours as grid columns (trailsnh-style, plan approval)."""
+    try:
+        start = hourly["time"].index(f"{today_iso}T{now_h:02d}:00")
+    except (KeyError, ValueError):
+        return None
+
+    def g(key, i):
+        series = hourly.get(key)
+        return series[i] if series and i < len(series) else None
+
+    hours = []
+    for i in range(start, min(start + 12, len(hourly["time"]))):
+        h = int(hourly["time"][i][11:13])
+        wd = g("wind_direction_10m", i)
+        hours.append({
+            "label": ("12A" if h == 0 else f"{h}A" if h < 12
+                      else "12P" if h == 12 else f"{h - 12}P"),
+            "temp": g("temperature_2m", i),
+            "feels": g("apparent_temperature", i),
+            "pop": g("precipitation_probability", i),
+            "cloud": g("cloud_cover", i),
+            "wind": g("wind_speed_10m", i),
+            "gust": g("wind_gusts_10m", i),
+            "dir": None if wd is None else _COMPASS[round(wd / 45) % 8],
+        })
+    return {"hours": hours} if hours else None
+
+
+def _outlook(daily: dict, today_iso: str) -> dict | None:
+    """Tomorrow through day 7, honest about forecast decay: days 1-4 full,
+    day 5 medium, 6-7 low confidence (accuracy note in the plan)."""
+    try:
+        start = daily["time"].index(today_iso)
+    except (KeyError, ValueError):
+        return None
+
+    def g(key, i):
+        series = daily.get(key)
+        return series[i] if series and i < len(series) else None
+
+    days = []
+    for i in range(start + 1, min(start + 8, len(daily["time"]))):
+        ahead = i - start
+        code = g("weather_code", i)
+        days.append({
+            "label": date.fromisoformat(daily["time"][i]).strftime("%a"),
+            "high": g("temperature_2m_max", i),
+            "low": g("temperature_2m_min", i),
+            "pop": g("precipitation_probability_max", i),
+            "word": _WMO_WORDS.get(code) if code is not None else None,
+            "conf": "high" if ahead <= 4 else "medium" if ahead == 5 else "low",
+        })
+    return {"days": days} if len(days) >= 2 else None   # 1 day = tomorrow strip's job
 
 
 def get_live_fields(conn: sqlite3.Connection,

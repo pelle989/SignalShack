@@ -94,7 +94,7 @@
   @keyframes ping{0%{transform:scale(1);opacity:.8}
                   70%,100%{transform:scale(2.6);opacity:0}}
   .t-legname{font-size:2.1vh}
-  .t-detail{font-size:1.2vh;color:var(--dim);line-height:1.35;
+  .t-detail{font-size:1.4vh;color:var(--dim);line-height:1.35;
             padding:0 .2vw .7vh 4vh;display:-webkit-box;-webkit-line-clamp:2;
             -webkit-box-orient:vertical;overflow:hidden}
   .tomorrow-strip{grid-column:1/-1;background:#10161f;border:1px solid var(--edge);
@@ -108,6 +108,24 @@
   .ann::before{content:"○ ";color:var(--faint)}
   .ann.pri::before{content:"● "}
   .disclaimer{font-size:1.4vh;color:var(--faint)}
+
+  /* full-width strips: forecast grid + 7-day outlook */
+  .fullrow{grid-column:1/-1;grid-row:auto}
+  .fx{width:100%;border-collapse:collapse;font-size:1.7vh;color:var(--dim)}
+  .fx td{text-align:center;padding:.3vh .2vw}
+  .fx td:first-child{text-align:left;color:var(--faint);font-size:1.3vh;
+                     text-transform:uppercase;letter-spacing:.08em;width:6vw}
+  .fx-h td{color:var(--text);font-weight:600}
+  .fx-t td{color:var(--text)}
+  .fx-wet{color:var(--amber);font-weight:600}
+  .ol{display:flex;gap:.4vw}
+  .ol-day{flex:1;text-align:center}
+  .ol-day.medium{opacity:.72} .ol-day.low{opacity:.48}
+  .ol-name{font-size:1.8vh;font-weight:600}
+  .ol-word{font-size:1.5vh;color:var(--dim);margin:.3vh 0}
+  .ol-t{font-size:2vh;color:var(--dim)} .ol-t b{color:var(--text)}
+  .ol-pop{font-size:1.4vh;color:var(--faint);margin-top:.3vh;min-height:1.6vh}
+  .ol-note{font-size:1.3vh;color:var(--faint);margin-top:.8vh}
 
   /* density presets (admin → Layout → Board density) */
   #board.compact{grid-template-columns:repeat(3,1fr)}
