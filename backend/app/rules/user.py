@@ -26,6 +26,7 @@ FRIENDLY_FIELDS = {
     "dew_evening_max": "Evening dewpoint (°F)",
     "dew_drop_vs_yesterday": "Dewpoint drop vs yesterday (°F)",
     "max_gust_today": "Max wind gust (mph)",
+    "wind_dir_now": "Wind direction now (N, NE, E, SE, S, SW, W, NW)",
     "wind_evening_max": "Evening wind (mph)",
     "pop_today_max": "Rain chance today (%)",
     "pop_commute_max": "Rain chance 7–9 AM (%)",
@@ -107,6 +108,8 @@ def validate_and_build(form: dict) -> tuple[dict | None, list[str]]:
         if op == "between" and not (isinstance(value, list) and len(value) == 2):
             problems.append("'between' needs two numbers like: [55, 70]")
             continue
+        if field == "wind_dir_now" and isinstance(value, str):
+            value = value.strip().upper()     # nw -> NW: fix, don't nag
         conditions.append({"field": field, "op": op, "value": value})
     if not conditions:
         problems.append("At least one condition is required.")

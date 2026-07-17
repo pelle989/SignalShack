@@ -400,7 +400,60 @@ def _forecast_grid(hourly: dict, today_iso: str, now_h: int) -> dict | None:
             "gust": g("wind_gusts_10m", i),
             "dir": None if wd is None else _COMPASS[round(wd / 45) % 8],
         })
-    return {"hours": hours} if hours else None
+    if not hours:
+        return None
+    return {"hours": hours, "chart": _forecast_chart(hours)}
+
+
+# arrow = direction the wind blows TOWARD (mockup convention: "W →")
+_DIR_ARROWS = {"N": "↓", "NE": "↙", "E": "←", "SE": "↖",
+               "S": "↑", "SW": "↗", "W": "→", "NW": "↘"}
+
+
+def _forecast_chart(hours: list[dict]) -> dict | None:
+    """Render-ready SVG geometry for the trailsnh-style timeline (480×84
+    viewBox: temp curve, precip bars, cloud shading, hour labels; wind rows)."""
+    xs = [8 + i * 40 for i in range(len(hours))]
+    temps = [h["temp"] for h in hours]
+    known = [t for t in temps if t is not None]
+    if not known:
+        return None
+    lo_v, hi_v = min(known), max(known)
+    span = (hi_v - lo_v) or 1
+
+    def ty(t):
+        return round(60 - (t - lo_v) / span * 44, 1)
+
+    chart = {
+        "temp_points": " ".join(f"{x + 8},{ty(t)}"
+                                for x, t in zip(xs, temps, strict=True)
+                                if t is not None),
+        "hi": {"x": xs[temps.index(hi_v)] + 8, "y": ty(hi_v),
+               "text": f"{hi_v:.0f}°"},
+        "lo": {"x": xs[temps.index(lo_v)] + 8, "y": ty(lo_v),
+               "text": f"{lo_v:.0f}°"},
+        "bars": [{"x": x, "y": round(70 - (h["pop"] or 0) * .48, 1),
+                  "h": round((h["pop"] or 0) * .48, 1)}
+                 for x, h in zip(xs, hours, strict=True)],
+        "cloud": [{"x": x - 4, "h": round((h["cloud"] or 0) * .08, 1)}
+                  for x, h in zip(xs, hours, strict=True)],
+        "hours": [{"x": xs[i], "text": hours[i]["label"]}
+                  for i in range(0, len(hours), 3)],
+        "winds": [], "dirs": [],
+    }
+    for i in range(1, len(hours), 2):
+        h = hours[i]
+        if h["wind"] is None:
+            continue
+        g = h["gust"]
+        gusty = g is not None and (g - h["wind"] >= 8 or g >= 20)
+        chart["winds"].append({
+            "x": xs[i], "hot": g is not None and g >= 30,
+            "text": f"{h['wind']:.0f}" + (f" g {g:.0f}" if gusty else "")})
+        if h["dir"]:
+            chart["dirs"].append(
+                {"x": xs[i], "text": f"{h['dir']} {_DIR_ARROWS[h['dir']]}"})
+    return chart
 
 
 def _outlook(daily: dict, today_iso: str) -> dict | None:

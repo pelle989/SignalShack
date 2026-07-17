@@ -97,6 +97,32 @@ def test_topic_split_p6_survives_s2(monkeypatch):
     assert "S2" in kept and "P6" in kept    # both surfaces, different topics
 
 
+def test_wind_dir_now_field():
+    from app.rules.user import picker_fields, validate_and_build
+    day = date(2026, 7, 14)
+    hourly, daily = synthetic_payload(day)
+    hourly["wind_direction_10m"] = [315] * len(hourly["time"])
+    fields = derive_fields(hourly, daily, day.isoformat(), now_h=6,
+                           season_state={})
+    assert fields["wind_dir_now"] == "NW"
+    # old snapshots without the variable: None, not a crash
+    del hourly["wind_direction_10m"]
+    fields = derive_fields(hourly, daily, day.isoformat(), now_h=6,
+                           season_state={})
+    assert fields["wind_dir_now"] is None
+    # picker offers it; a rule on it evaluates; lowercase input normalized
+    assert any(f["name"] == "wind_dir_now" for f in picker_fields())
+    rule, problems = validate_and_build({
+        "name": "NW wind", "output": "Wind off the bay today.",
+        "band": "plan", "season": "all",
+        "cfield": ["wind_dir_now"], "cop": ["=="], "cvalue": ["nw"]})
+    assert not problems
+    assert rule["conditions"][0]["value"] == "NW"
+    rule.setdefault("id", "U-test")           # engine id (load_enabled adds it)
+    assert evaluate(rule, {"wind_dir_now": "NW"}, month=7) is not None
+    assert evaluate(rule, {"wind_dir_now": "S"}, month=7) is None
+
+
 def test_p1_cool_start_gate():
     """v4 scorelog fix: 'dress in layers' needs an actually-cool morning."""
     p1 = next(r for r in SEEDS if r["id"] == "P1")

@@ -41,6 +41,13 @@ def season_year(t):
     return t.year if t.month >= 7 else t.year - 1
 
 
+_COMPASS = ["N", "NE", "E", "SE", "S", "SW", "W", "NW"]
+
+
+def compass(deg):
+    return None if deg is None else _COMPASS[round(deg / 45) % 8]
+
+
 def derive_fields(hourly: dict, daily: dict, day_iso: str, now_h: int,
                   season_state: dict) -> dict:
     """hourly/daily: Open-Meteo-shaped arrays (must include >=7 past days and
@@ -61,6 +68,8 @@ def derive_fields(hourly: dict, daily: dict, day_iso: str, now_h: int,
     cloud, dew = series("cloud_cover"), series("dew_point_2m")
     wind, gust = series("wind_speed_10m"), series("wind_gusts_10m")
     uv = series("uv_index") if "uv_index" in hourly else [None] * 24
+    wdir = (series("wind_direction_10m") if "wind_direction_10m" in hourly
+            else [None] * 24)      # older snapshots predate this variable
 
     today_d = date.fromisoformat(day_iso)
     D = daily
@@ -156,6 +165,7 @@ def derive_fields(hourly: dict, daily: dict, day_iso: str, now_h: int,
                                  if dew_max_yday is not None and ev_dew_max is not None else None,
         # --- wind / sky / sun
         "max_gust_today": max((g for g in gust if g is not None), default=None),
+        "wind_dir_now": compass(wdir[now_h]) if now_h < len(wdir) else None,
         "wind_overnight_max": max(((wind[i] or 0) for i in ov), default=None),
         "wind_evening_max": max(((wind[i] or 0) for i in ev), default=None),
         "cloud_overnight_max": max(((cloud[i] or 0) for i in ov), default=None),

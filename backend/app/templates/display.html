@@ -109,23 +109,19 @@
   .ann.pri::before{content:"● "}
   .disclaimer{font-size:1.4vh;color:var(--faint)}
 
-  /* full-width strips: forecast grid + 7-day outlook */
-  .fullrow{grid-column:1/-1;grid-row:auto}
-  .fx{width:100%;border-collapse:collapse;font-size:1.7vh;color:var(--dim)}
-  .fx td{text-align:center;padding:.3vh .2vw}
-  .fx td:first-child{text-align:left;color:var(--faint);font-size:1.3vh;
-                     text-transform:uppercase;letter-spacing:.08em;width:6vw}
-  .fx-h td{color:var(--text);font-weight:600}
-  .fx-t td{color:var(--text)}
-  .fx-wet{color:var(--amber);font-weight:600}
-  .ol{display:flex;gap:.4vw}
-  .ol-day{flex:1;text-align:center}
+  /* forecast grid + 7-day outlook — sized to live in a standard card slot
+     beside the primary (not full-width strips) */
+  .fxsvg{width:100%;height:13vh;display:block;margin-top:.4vh}
+  .fxsvg.wind{height:4.5vh;margin-top:.8vh}
+  .ol{display:flex;gap:.2vw}
+  .ol-day{flex:1;text-align:center;min-width:0;overflow:hidden}
   .ol-day.medium{opacity:.72} .ol-day.low{opacity:.48}
-  .ol-name{font-size:1.8vh;font-weight:600}
-  .ol-word{font-size:1.5vh;color:var(--dim);margin:.3vh 0}
-  .ol-t{font-size:2vh;color:var(--dim)} .ol-t b{color:var(--text)}
-  .ol-pop{font-size:1.4vh;color:var(--faint);margin-top:.3vh;min-height:1.6vh}
-  .ol-note{font-size:1.3vh;color:var(--faint);margin-top:.8vh}
+  .ol-name{font-size:1.5vh;font-weight:600}
+  .ol-word{font-size:1.2vh;color:var(--dim);margin:.2vh 0;white-space:nowrap;
+           overflow:hidden;text-overflow:ellipsis}
+  .ol-t{font-size:1.5vh;color:var(--dim)} .ol-t b{color:var(--text)}
+  .ol-pop{font-size:1.2vh;color:var(--faint);margin-top:.2vh;min-height:1.4vh}
+  .ol-note{font-size:1.2vh;color:var(--faint);margin-top:.6vh}
 
   /* density presets (admin → Layout → Board density) */
   #board.compact{grid-template-columns:repeat(3,1fr)}

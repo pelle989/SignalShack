@@ -37,6 +37,14 @@ def test_forecast_grid_next_12_hours():
     assert grid["hours"][5]["label"] == "12P"
     assert grid["hours"][0]["dir"] == "W"                # 270°
     assert grid["hours"][0]["temp"] is not None
+    # trailsnh-style chart geometry, server-rendered
+    c = grid["chart"]
+    assert len(c["temp_points"].split()) == 12
+    assert len(c["bars"]) == 12 and len(c["cloud"]) == 12
+    assert c["hi"]["text"].endswith("°")
+    assert 14 <= c["hi"]["y"] <= 62 and c["lo"]["y"] == 60.0   # scaled range
+    assert c["dirs"][0]["text"] == "W →"                 # arrow = blowing toward
+    assert all(w["text"] for w in c["winds"])
 
 
 def test_forecast_grid_tolerates_old_snapshots():
@@ -73,4 +81,4 @@ def test_board_integration_and_layout(tmp_path, monkeypatch):
     tpl = templates.env.get_template("_board.html")
     html = tpl.render(**ctx, csrf="x")
     assert "Next 12 hours" in html and "Next 7 days" in html
-    assert "12P" in html and "% rain" in html
+    assert "<polyline" in html and "% rain" in html      # SVG curve rendered

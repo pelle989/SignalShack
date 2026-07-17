@@ -120,23 +120,33 @@
 </div>
 
 {% elif card == 'forecast' %}
-<div class="card fullrow">
+<div class="card">
   <h2>Next 12 hours</h2>
-  <table class="fx">
-    <tr class="fx-h"><td></td>{% for h in forecast.hours %}<td>{{ h.label }}</td>{% endfor %}</tr>
-    <tr class="fx-t"><td>Temp</td>{% for h in forecast.hours %}<td>{{ '%.0f'|format(h.temp) ~ '°' if h.temp is not none else '–' }}</td>{% endfor %}</tr>
-    <tr><td>Feels</td>{% for h in forecast.hours %}<td>{{ '%.0f'|format(h.feels) ~ '°' if h.feels is not none else '–' }}</td>{% endfor %}</tr>
-    <tr><td>Rain %</td>{% for h in forecast.hours %}<td{% if h['pop'] and h['pop'] >= 50 %} class="fx-wet"{% endif %}>{{ h['pop'] if h['pop'] is not none else '–' }}</td>{% endfor %}</tr>
-    <tr><td>Cloud %</td>{% for h in forecast.hours %}<td>{{ h.cloud if h.cloud is not none else '–' }}</td>{% endfor %}</tr>
-    <tr><td>Wind</td>{% for h in forecast.hours %}<td>{{ '%.0f'|format(h.wind) if h.wind is not none else '–' }}</td>{% endfor %}</tr>
-    <tr><td>Gusts</td>{% for h in forecast.hours %}<td{% if h.gust and h.gust >= 30 %} class="fx-wet"{% endif %}>{{ '%.0f'|format(h.gust) if h.gust is not none else '–' }}</td>{% endfor %}</tr>
-    <tr><td>Dir</td>{% for h in forecast.hours %}<td>{{ h.dir or '–' }}</td>{% endfor %}</tr>
-  </table>
+  {% set c = forecast.chart %}
+  {% if c %}
+  <svg class="fxsvg" viewBox="0 0 480 84" preserveAspectRatio="none" aria-label="12-hour temperature, rain chance, cloud cover">
+    {# cloud shading: sky row along the top, deeper = cloudier #}
+    <g fill="#8b98a9" opacity=".18">{% for r in c.cloud %}<rect x="{{ r.x }}" y="2" width="36" height="{{ r.h }}"/>{% endfor %}</g>
+    <line x1="0" y1="70" x2="480" y2="70" stroke="#1f2937" stroke-width="1"/>
+    {# precip probability bars #}
+    <g fill="#5b9dd9" opacity=".3">{% for b in c.bars %}<rect x="{{ b.x }}" y="{{ b.y }}" width="16" height="{{ b.h }}"/>{% endfor %}</g>
+    {# temperature curve #}
+    <polyline points="{{ c.temp_points }}" fill="none" stroke="#e0a63d" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+    <circle cx="{{ c.hi.x }}" cy="{{ c.hi.y }}" r="3.5" fill="#e0a63d"/>
+    <text x="{{ c.hi.x }}" y="{{ c.hi.y - 7 }}" text-anchor="middle" font-size="11" fill="#e8edf4" font-weight="600">{{ c.hi.text }}</text>
+    <text x="{{ c.lo.x }}" y="{{ c.lo.y + 13 }}" text-anchor="middle" font-size="11" fill="#8b98a9">{{ c.lo.text }}</text>
+    <g font-size="10" fill="#5c6878">{% for l in c.hours %}<text x="{{ l.x }}" y="82">{{ l.text }}</text>{% endfor %}</g>
+  </svg>
+  <svg class="fxsvg wind" viewBox="0 0 480 30" preserveAspectRatio="none" aria-label="wind speed, gusts, direction">
+    <g font-size="10.5" fill="#8b98a9"><text x="4" y="12" fill="#5c6878">wind</text>{% for w in c.winds %}<text x="{{ w.x }}" y="12"{% if w.hot %} fill="#e0a63d" font-weight="600"{% endif %}>{{ w.text }}</text>{% endfor %}</g>
+    <g font-size="10.5" fill="#5c6878"><text x="4" y="26">dir</text>{% for dd in c.dirs %}<text x="{{ dd.x }}" y="26">{{ dd.text }}</text>{% endfor %}</g>
+  </svg>
+  {% endif %}
   <div class="stamp">Open-Meteo · {{ stamp_weather }}</div>
 </div>
 
 {% elif card == 'outlook' %}
-<div class="card fullrow">
+<div class="card">
   <h2>Next 7 days</h2>
   <div class="ol">
     {% for d in outlook.days %}
