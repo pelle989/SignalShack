@@ -11,7 +11,7 @@ from datetime import date, datetime, timedelta
 from pathlib import Path
 
 from app.adapters.airnow import AirNowAdapter
-from app.adapters.mta import MTAAdapter, line_view
+from app.adapters.mta import STATUS_RANK, MTAAdapter, line_view
 from app.adapters.nws import NWSAdapter
 from app.adapters.open_meteo import OpenMeteoAdapter
 from app.adapters.weather_derive import derive_fields, derive_tomorrow
@@ -168,7 +168,6 @@ def compose_board(conn: sqlite3.Connection, now: datetime | None = None) -> dict
         "SELECT name, legs_json FROM commute_profile WHERE mode='train'"
         " AND actively_monitored=1 ORDER BY id").fetchall()
     if route_rows:
-        from app.adapters.mta import STATUS_RANK
         from app.transit import gtfs
         mta_snap = snapshots.latest(conn, loc["id"], "mta")
         t_state = snapshots.freshness(mta_snap and mta_snap["fetched_at"],
@@ -198,6 +197,38 @@ def compose_board(conn: sqlite3.Connection, now: datetime | None = None) -> dict
             if t_state == "unavailable":
                 route["label"], route["attention"] = "Status unknown", None
             ctx["transit_routes"].append(route)
+
+    # ---- combined Transit card summary: one card, worst status wins the
+    # headline and the border (glanceability survives any number of rows)
+    ctx["transit_summary"] = None
+    entries = ([("line", v) for v in ctx["transit"]]
+               + [("route", r) for r in ctx["transit_routes"]])
+    if entries:
+        kind, worst = min(entries,
+                          key=lambda e: STATUS_RANK.index(e[1]["status"]))
+        stale = any(e[1].get("state") == "stale" for e in entries)
+        if any(e[1].get("state") == "unavailable" for e in entries):
+            summary = {"status": "unknown", "attention": None, "stale": stale,
+                       "headline": "Status unknown", "sub": ""}
+        elif worst["status"] == "good":
+            summary = {"status": "good", "attention": None, "stale": stale,
+                       "headline": "✓ Good service on all lines", "sub": ""}
+        elif kind == "line":
+            disp = ("LIRR" if worst["line"] == "LIRR"
+                    else "Metro-North" if worst["line"] == "MNR"
+                    else f"{worst['line']} train")
+            where = (f" · {worst['segment_label']}"
+                     if worst.get("segment_label") else "")
+            summary = {"status": worst["status"],
+                       "attention": worst["attention"], "stale": stale,
+                       "headline": f"{disp}{where} — {worst['label']}",
+                       "sub": worst.get("headline", "")}
+        else:
+            summary = {"status": worst["status"],
+                       "attention": worst["attention"], "stale": stale,
+                       "headline": f"{worst['name']} — {worst['label']}",
+                       "sub": ""}
+        ctx["transit_summary"] = summary
 
     # ---- air quality card (V1.1): appears once an AirNow key is stored
     ctx["air"] = None

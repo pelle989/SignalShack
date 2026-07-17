@@ -35,34 +35,39 @@
 </div>
 
 {% elif card == 'transit' %}
-{% for t in transit %}
-<div class="card{% if primary and loop.first %} primary{% endif %}{% if t.attention == 'red' %} attn-red{% elif t.attention == 'amber' %} attn-amber{% endif %}">
-  <h2><span class="bullet" style="background:{{ t.color }};{% if t.dark_text %}color:#111{% endif %}">{{ t.line if t.line not in ('LIRR','MNR') else '' }}</span>
-      {{ 'LIRR' if t.line == 'LIRR' else 'Metro-North' if t.line == 'MNR' else t.line ~ ' Train' }}{% if t.segment_label %} · {{ t.segment_label }}{% endif %}</h2>
-  <div class="line-status {{ 'ok' if t.status == 'good' else 'late' if t.attention == 'amber' else 'bad' if t.attention == 'red' else 'dim' }}">{{ t.label }}</div>
-  {% if t.headline %}<div class="line-head">{{ t.headline }}</div>{% endif %}
-  {% if t.state == 'stale' %}<div class="empty warn">Status may be outdated.</div>{% endif %}
-  <div class="stamp">MTA · {{ stamp_transit }}</div>
-</div>
-{% endfor %}
+{# ONE combined card: worst status wins the headline + border (plan: glance-first) #}
+{% set s = transit_summary %}
+<div class="card{% if primary %} primary{% endif %}{% if s.attention == 'red' %} attn-red{% elif s.attention == 'amber' %} attn-amber{% endif %}">
+  <h2>Transit</h2>
+  <div class="line-status {{ 'ok' if s.status == 'good' else 'late' if s.attention == 'amber' else 'bad' if s.attention == 'red' else 'dim' }}">{{ s.headline }}</div>
+  {% if s.sub %}<div class="line-head">{{ s.sub }}</div>{% endif %}
 
-{% for r in transit_routes %}
-<div class="card{% if primary and loop.first and not transit %} primary{% endif %}{% if r.attention == 'red' %} attn-red{% elif r.attention == 'amber' %} attn-amber{% endif %}">
-  <h2>{{ r.name }}</h2>
-  <div class="line-status {{ 'ok' if r.status == 'good' else 'late' if r.attention == 'amber' else 'bad' if r.attention == 'red' else 'dim' }}">{{ r.label }}</div>
-  <div class="legs" style="margin-top:.8vh">
-    {% for leg in r.legs %}
-    <div style="display:flex;align-items:center;gap:.6vw;font-size:2vh;color:var(--dim);margin-bottom:.7vh">
-      <span class="bullet" style="background:{{ leg.color }};{% if leg.dark_text %}color:#111{% endif %};width:2.8vh;height:2.8vh;font-size:1.8vh">{{ leg.line }}</span>
-      {{ leg.from_name }} → {{ leg.to_name }} ·
-      <span class="{{ 'ok' if leg.status == 'good' else 'warn' }}" style="{% if leg.status == 'good' %}color:var(--green){% elif leg.attention == 'red' %}color:var(--red){% elif leg.attention == 'amber' %}color:var(--amber){% endif %};font-weight:600">{{ leg.label }}</span>
-    </div>
-    {% endfor %}
+  {% if transit and transit_routes %}<div class="t-section">Lines</div>{% endif %}
+  {% for t in transit %}
+  <div class="t-row">
+    <span class="bullet" style="background:{{ t.color }};{% if t.dark_text %}color:#111{% endif %}">{{ t.line if t.line not in ('LIRR','MNR') else '' }}</span>
+    <span class="t-name">{{ 'LIRR' if t.line == 'LIRR' else 'Metro-North' if t.line == 'MNR' else t.line ~ ' Train' }}{% if t.segment_label %} <span class="t-seg">· {{ t.segment_label }}</span>{% endif %}</span>
+    <span class="t-st" style="color:{% if t.status == 'good' %}var(--green){% elif t.attention == 'red' %}var(--red){% elif t.attention == 'amber' %}var(--amber){% else %}var(--dim){% endif %}">{{ t.label }}</span>
   </div>
-  {% if r.state == 'stale' %}<div class="empty warn">Status may be outdated.</div>{% endif %}
+  {% endfor %}
+
+  {% if transit and transit_routes %}<div class="t-section">Routes</div>{% endif %}
+  {% for r in transit_routes %}
+  <div class="t-row">
+    <span class="t-name">{{ r.name }}
+      <span class="t-seg">·
+      {%- for leg in r.legs %} {{ leg.line }} {{ leg.from_name }} → {{ leg.to_name }}
+        <span style="color:{% if leg.status == 'good' %}var(--green){% elif leg.attention == 'red' %}var(--red){% elif leg.attention == 'amber' %}var(--amber){% else %}var(--dim){% endif %}">{{ leg.label }}</span>
+        {%- if not loop.last %} ·{% endif %}
+      {%- endfor %}</span>
+    </span>
+    <span class="t-st" style="color:{% if r.status == 'good' %}var(--green){% elif r.attention == 'red' %}var(--red){% elif r.attention == 'amber' %}var(--amber){% else %}var(--dim){% endif %}">{{ r.label }}</span>
+  </div>
+  {% endfor %}
+
+  {% if s.stale %}<div class="empty warn">Status may be outdated.</div>{% endif %}
   <div class="stamp">MTA · {{ stamp_transit }}</div>
 </div>
-{% endfor %}
 
 {% elif card == 'air' %}
 <div class="card{% if primary %} primary{% endif %}{% if air.aqi and air.aqi > 100 %} attn-amber{% endif %}">

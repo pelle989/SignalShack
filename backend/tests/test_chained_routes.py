@@ -104,6 +104,60 @@ def test_route_save_and_delete_via_admin(tmp_path, monkeypatch):
         conn.close()
 
 
+def test_transit_summary_route_worst_wins(tmp_path, monkeypatch):
+    """Combined card headline + border come from the worst entry."""
+    use_r_dataset(tmp_path, monkeypatch)
+    conn = setup_conn(tmp_path, monkeypatch)
+    now = datetime(2026, 7, 16, 7, 30)
+    add_route(conn)
+    snapshots.save(conn, 1, "mta", R_DELAYS, now=now)
+    ctx = compose_board(conn, now=now)
+    s = ctx["transit_summary"]
+    assert s["status"] == "delays" and s["attention"] == "amber"
+    assert s["headline"] == "Work commute — Delays en route"
+
+
+def test_transit_summary_line_worst_is_named(tmp_path, monkeypatch):
+    use_r_dataset(tmp_path, monkeypatch)
+    conn = setup_conn(tmp_path, monkeypatch)
+    now = datetime(2026, 7, 16, 7, 30)
+    with conn:
+        conn.execute("INSERT INTO monitor (adapter, field) VALUES ('mta', 'R')")
+        conn.execute("INSERT INTO monitor (adapter, field) VALUES ('mta', 'F')")
+    snapshots.save(conn, 1, "mta", R_DELAYS, now=now)
+    ctx = compose_board(conn, now=now)
+    s = ctx["transit_summary"]
+    assert s["headline"] == "R train — Delays"
+    assert s["sub"] == "R trains delayed."      # MTA headline as subtext
+    assert s["attention"] == "amber"
+
+
+def test_transit_summary_all_good(tmp_path, monkeypatch):
+    use_r_dataset(tmp_path, monkeypatch)
+    conn = setup_conn(tmp_path, monkeypatch)
+    now = datetime(2026, 7, 16, 7, 30)
+    with conn:
+        conn.execute("INSERT INTO monitor (adapter, field) VALUES ('mta', 'F')")
+    add_route(conn)
+    snapshots.save(conn, 1, "mta", {"feeds": {}, "errors": []}, now=now)
+    ctx = compose_board(conn, now=now)
+    s = ctx["transit_summary"]
+    assert s["status"] == "good" and s["attention"] is None
+    assert "Good service" in s["headline"]
+
+
+def test_transit_summary_unavailable_is_honest(tmp_path, monkeypatch):
+    """No MTA snapshot => 'Status unknown', never a green all-clear."""
+    use_r_dataset(tmp_path, monkeypatch)
+    conn = setup_conn(tmp_path, monkeypatch)
+    with conn:
+        conn.execute("INSERT INTO monitor (adapter, field) VALUES ('mta', 'R')")
+    ctx = compose_board(conn, now=datetime(2026, 7, 16, 7, 30))
+    s = ctx["transit_summary"]
+    assert s["status"] == "unknown" and s["headline"] == "Status unknown"
+    assert s["attention"] is None
+
+
 def test_scheduler_wakes_for_routes_alone(tmp_path, monkeypatch):
     conn = setup_conn(tmp_path, monkeypatch)
     assert "mta" not in [a.manifest.name for a in _active_adapters(conn)]
