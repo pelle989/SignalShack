@@ -45,7 +45,10 @@ def test_forecast_grid_next_12_hours():
     assert c["pop_path"].rstrip().endswith("Z")
     assert "Z" not in c["temp_path"]                     # temp is a LINE
     assert len(c["dots"]) == 12
-    assert len(c["temp_labels"]) == 6 and len(c["hours"]) == 6   # every 2h
+    assert len(c["hours"]) == 6                          # hour labels every 2h
+    # temp labels the trailsnh way: endpoints + extremes, plateaus collapsed
+    assert 2 <= len(c["temp_labels"]) <= 6
+    assert all(lab["text"].endswith("°") for lab in c["temp_labels"])
     assert c["wind_path"] and c["gust_path"]
     assert c["dirs"][0]["text"] == "W →"                 # arrow = blowing toward
     assert all(w["text"] for w in c["winds"])

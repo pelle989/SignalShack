@@ -436,6 +436,29 @@ def _smooth_path(pts: list[tuple], close_to: float | None = None) -> str:
 _CH_TOP, _CH_BASE, _CH_STEP = 12, 88, 40
 
 
+def _extreme_labels(pts: list[tuple], vals: list) -> list[dict]:
+    """Temp labels the trailsnh way: endpoints + local highs/lows only
+    (their 55° → 72° → 51° pattern), minima labeled below the line."""
+    n = len(vals)
+    if n == 0:
+        return []
+    keep = {0, n - 1}
+    for i in range(1, n - 1):
+        if (vals[i] >= vals[i - 1] and vals[i] >= vals[i + 1]) or \
+                (vals[i] <= vals[i - 1] and vals[i] <= vals[i + 1]):
+            keep.add(i)
+    out, last_val = [], None
+    for i in sorted(keep):
+        if last_val is not None and vals[i] == last_val:
+            continue                     # plateau: one label is enough
+        last_val = vals[i]
+        is_min = vals[i] <= min(vals[max(0, i - 1)], vals[min(n - 1, i + 1)])
+        out.append({"x": pts[i][0],
+                    "y": pts[i][1] + 13 if is_min else pts[i][1] - 6,
+                    "text": f"{vals[i]:.0f}°"})
+    return out
+
+
 def _forecast_chart(hours: list[dict]) -> dict | None:
     """Chartist-faithful geometry (verified against trailsnh's #wxsvg):
     horizontal gridlines, smooth AREA series from the baseline (cloud gray,
@@ -463,10 +486,7 @@ def _forecast_chart(hours: list[dict]) -> dict | None:
             close_to=_CH_BASE),
         "temp_path": _smooth_path(temp_pts),
         "dots": [{"x": x, "y": y} for x, y in temp_pts],
-        "temp_labels": [{"x": xs[i], "y": vy(hours[i]["temp"]) - 6,
-                         "text": f"{hours[i]['temp']:.0f}"}
-                        for i in range(0, len(hours), 2)
-                        if hours[i]["temp"] is not None],
+        "temp_labels": _extreme_labels(temp_pts, [t for _, t in temps]),
         "wind_path": _smooth_path(
             [(x, vy(h["wind"])) for x, h in zip(xs, hours, strict=True)
              if h["wind"] is not None]),
