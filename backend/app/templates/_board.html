@@ -69,7 +69,6 @@
         </span>
       </div>
       {% if leg.status != 'good' and leg.headline %}<div class="t-detail">{{ leg.headline }}</div>{% endif %}
-      {% if not loop.last %}<div class="t-legjoin">transfer at {{ leg.to_name }}</div>{% endif %}
       {% endfor %}
     </div>
     <span class="t-st" style="padding-top:.4vh;color:{% if r.status == 'good' %}var(--green){% elif r.attention == 'red' %}var(--red){% elif r.attention == 'amber' %}var(--amber){% else %}var(--dim){% endif %}">{{ r.label }}</span>

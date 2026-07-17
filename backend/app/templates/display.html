@@ -94,10 +94,9 @@
   @keyframes ping{0%{transform:scale(1);opacity:.8}
                   70%,100%{transform:scale(2.6);opacity:0}}
   .t-legname{font-size:2.1vh}
-  .t-legjoin{font-size:1.6vh;color:var(--faint);padding:.2vh 0 .2vh 4.6vh;
-             border-left:2px dotted var(--edge);margin-left:1vh}
   .t-detail{font-size:1.7vh;color:var(--dim);line-height:1.35;
-            padding:0 .2vw .7vh 4vh}
+            padding:0 .2vw .7vh 4vh;display:-webkit-box;-webkit-line-clamp:2;
+            -webkit-box-orient:vertical;overflow:hidden}
   .tomorrow-strip{grid-column:1/-1;background:#10161f;border:1px solid var(--edge);
                   border-radius:14px;padding:1.4vh 1.6vw;display:flex;
                   justify-content:space-between;align-items:center;min-height:auto}
