@@ -58,6 +58,8 @@
     <input type="hidden" name="csrf" value="{{ csrf }}">
     <label style="display:block;margin-bottom:6px"><input type="radio" name="hours" value="12" {% if forecast_horizon == 12 %}checked{% endif %}>
       <b>12 hours</b> <span class="dim">— hour-by-hour detail, wind row and dots.</span></label>
+    <label style="display:block;margin-bottom:6px"><input type="radio" name="hours" value="24" {% if forecast_horizon == 24 %}checked{% endif %}>
+      <b>24 hours</b> <span class="dim">— the full day ahead at a glance.</span></label>
     <label style="display:block;margin-bottom:6px"><input type="radio" name="hours" value="48" {% if forecast_horizon == 48 %}checked{% endif %}>
       <b>48 hours</b> <span class="dim">— two days at a glance, fits the card.</span></label>
     <label style="display:block;margin-bottom:6px"><input type="radio" name="hours" value="72" {% if forecast_horizon == 72 %}checked{% endif %}>

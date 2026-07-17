@@ -139,7 +139,7 @@
   {# Chartist-style line chart, trailsnh palette adapted to the dark board:
      sky gradient · gray cloud · GREEN rain chance · yellow wind (dashed =
      gusts) · bright temp line (their black) #}
-  <svg class="fxsvg" viewBox="0 0 480 102" preserveAspectRatio="none" aria-label="temperature, rain chance, cloud cover, wind over the next {{ forecast.horizon or 12 }} hours">
+  <svg class="fxsvg" viewBox="0 0 {{ c.vw }} 102" preserveAspectRatio="none" aria-label="temperature, rain chance, cloud cover, wind over the next {{ forecast.horizon or 12 }} hours">
     <defs>
       <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
         <stop offset="0" stop-color="#2b4a7a" stop-opacity=".15"/>
@@ -147,9 +147,9 @@
       </linearGradient>
     </defs>
     {# fixed backdrop: sky + horizontal value gridlines span the visible window #}
-    <rect x="18" y="12" width="456" height="76" fill="url(#sky)"/>
+    <rect x="18" y="12" width="{{ c.vw - 24 }}" height="76" fill="url(#sky)"/>
     <g class="ct-grids" stroke="#3a4a5d" stroke-width="1" stroke-dasharray="2 4">
-      {% for gy in c.grid_y %}<line x1="18" y1="{{ gy }}" x2="474" y2="{{ gy }}"/>{% endfor %}
+      {% for gy in c.grid_y %}<line x1="18" y1="{{ gy }}" x2="{{ c.vw - 6 }}" y2="{{ gy }}"/>{% endfor %}
     </g>
     {# scrolling layer: everything time-anchored pans together for 72h #}
     <g class="fx-scroll" data-scroll="{{ c.scroll }}">
@@ -177,7 +177,7 @@
     <span><i style="background:#d8d867"></i>wind{% if c.winds %} <em>(4 g 13 = 4 mph, gusts 13)</em>{% endif %}</span>
   </div>
   {% if c.winds %}
-  <svg class="fxsvg wind" viewBox="0 0 480 30" preserveAspectRatio="none" aria-label="wind speed, gusts, direction">
+  <svg class="fxsvg wind" viewBox="0 0 {{ c.vw }} 30" preserveAspectRatio="none" aria-label="wind speed, gusts, direction">
     <g font-size="10.5" fill="#8b98a9"><text x="4" y="12" fill="#5c6878">wind</text>{% for w in c.winds %}<text x="{{ w.x }}" y="12"{% if w.hot %} fill="#e0a63d" font-weight="600"{% endif %}>{{ w.text }}</text>{% endfor %}</g>
     <g font-size="10.5" fill="#5c6878"><text x="4" y="26">dir</text>{% for dd in c.dirs %}<text x="{{ dd.x }}" y="26">{{ dd.text }}</text>{% endfor %}</g>
   </svg>
@@ -201,11 +201,11 @@
     {% endfor %}
   </div>
   {% if outlook.accuracy %}
-  <div class="ol-acc-cap">Forecast accuracy</div>
   <div class="ol-acc" role="img" aria-label="Forecast accuracy fades from {{ outlook.accuracy[0].pct }}% to {{ outlook.accuracy[-1].pct }}% over the week">
     {% for a in outlook.accuracy %}
     <div class="ol-acc-seg {{ a.conf }}" style="flex-grow:{{ a.span }}">
       <div class="ol-acc-bar" style="height:{{ a.pct }}%"></div>
+      {% if loop.first %}<span class="ol-acc-title">Forecast accuracy</span>{% endif %}
       <span class="ol-acc-pct">{{ a.pct }}%</span>
     </div>
     {% endfor %}

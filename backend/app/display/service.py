@@ -379,8 +379,8 @@ _WMO_WORDS = {0: "Clear", 1: "Mostly sun", 2: "Part cloudy", 3: "Cloudy",
 
 
 # horizon (total hours) -> hours visible in the window at once. 72h shows a
-# 48h window and pans across the extra day; 12/48 fit their window statically.
-_HORIZON_WINDOW = {12: 12, 48: 48, 72: 48}
+# 48h window and pans across the extra day; 12/24/48 fit their window statically.
+_HORIZON_WINDOW = {12: 12, 24: 24, 48: 48, 72: 48}
 
 
 def _forecast_grid(hourly: dict, today_iso: str, now_h: int,
@@ -448,7 +448,11 @@ def _smooth_path(pts: list[tuple], close_to: float | None = None) -> str:
 # breathing margin. Point spacing (step) is derived per-horizon so a window's
 # worth of hours fills the plot; wider horizons (72h) overflow and pan.
 _CH_TOP, _CH_BASE = 12, 88
-_CH_LEFT, _CH_RIGHT, _CH_W = 18, 22, 480
+# _CH_W is the viewBox width (the coordinate space). It is deliberately wider
+# than the card's pixel width so — with preserveAspectRatio="none" — text is
+# scaled DOWN horizontally, giving the time-axis labels room to breathe instead
+# of stretching into each other (esp. the dense 48/72h views).
+_CH_LEFT, _CH_RIGHT, _CH_W = 18, 22, 600
 
 
 def _extreme_labels(pts: list[tuple], vals: list) -> list[dict]:
@@ -492,8 +496,8 @@ def _forecast_chart(hours: list[dict], hpw: int | None = None) -> dict | None:
     plot_w = _CH_W - _CH_LEFT - _CH_RIGHT
     step = plot_w / max(hpw - 1, 1)
     xs = [round(_CH_LEFT + i * step, 1) for i in range(n)]
-    dense = hpw > 12                      # 48/72h: thin labels, drop dots/rows
-    lab_every = 6 if dense else 2
+    dense = hpw > 12                      # 24/48/72h: thin labels, drop dots/rows
+    lab_every = 2 if hpw <= 12 else 4 if hpw <= 24 else 6
 
     def vy(v):        # value 0-100 -> chart y
         v = max(0, min(100, v))
@@ -528,6 +532,7 @@ def _forecast_chart(hours: list[dict], hpw: int | None = None) -> dict | None:
         # pan distance: extra hours beyond the window, in user units
         "scroll": round(max(0, n - hpw) * step, 1),
         "content_w": round(_CH_LEFT + (n - 1) * step + _CH_RIGHT, 1),
+        "vw": _CH_W,                      # viewBox width the template draws into
     }
     for i in range(1, n):
         if hours[i].get("date") and hours[i]["date"] != hours[i - 1].get("date"):
@@ -593,8 +598,9 @@ def _rain_when(hourly: dict, day_iso: str) -> str | None:
 
 
 def _outlook(daily: dict, today_iso: str, hourly: dict | None = None) -> dict | None:
-    """Tomorrow through day 7, honest about forecast decay: days 1-4 full,
-    day 5 medium, 6-7 low confidence (accuracy note in the plan)."""
+    """Tomorrow through day 7, honest about forecast decay. Tiers track the
+    NWS accuracy curve: days 1-3 ~95%, days 4-5 ~90%, days 6-7 ~80%
+    (day 8-10 would be ~50%, but this card stops at 7)."""
     try:
         start = daily["time"].index(today_iso)
     except (KeyError, ValueError):
@@ -617,7 +623,7 @@ def _outlook(daily: dict, today_iso: str, hourly: dict | None = None) -> dict | 
             "word": _WMO_WORDS.get(code) if code is not None else None,
             "icon": _wmo_icon(code),
             "rain_when": _rain_when(hourly, day_iso) if hourly else None,
-            "conf": "high" if ahead <= 4 else "medium" if ahead == 5 else "low",
+            "conf": "high" if ahead <= 3 else "medium" if ahead <= 5 else "low",
         })
     if len(days) < 2:                   # 1 day = tomorrow strip's job
         return None
@@ -625,8 +631,9 @@ def _outlook(daily: dict, today_iso: str, hourly: dict | None = None) -> dict | 
 
 
 # how confident the outlook is, per tier — replaces the old prose caveat with
-# an honest number (typical multi-day forecast skill, matches the plan's fade)
-_CONF_PCT = {"high": 90, "medium": 70, "low": 50}
+# an honest number. Figures follow the NWS accuracy curve: 1-3d ~95%, 4-5d
+# ~90%, 6-7d ~80% (a 10-day forecast is ~50%, but this card stops at day 7).
+_CONF_PCT = {"high": 95, "medium": 90, "low": 80}
 
 
 def _accuracy_band(days: list[dict]) -> list[dict]:

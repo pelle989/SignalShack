@@ -20,7 +20,7 @@ FOCUS_CARD_CAP = 3
 
 
 FORECAST_STYLES = ["chart", "table"]
-FORECAST_HORIZONS = [12, 48, 72]        # hours the forecast chart spans
+FORECAST_HORIZONS = [12, 24, 48, 72]    # hours the forecast chart spans
 
 
 def _persist(conn: sqlite3.Connection, **changes) -> None:

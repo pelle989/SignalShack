@@ -111,8 +111,11 @@
 
   /* forecast grid + 7-day outlook — sized to live in a standard card slot
      beside the primary (not full-width strips) */
-  .fxsvg{width:100%;height:14vh;display:block;margin-top:.4vh}
-  .fxsvg.wind{height:4.5vh;margin-top:.8vh}
+  /* Main forecast chart: ~20% taller than before (14vh -> 17vh) but card-aware.
+     flex-basis sets the target height; flex-shrink + min-height:0 let it give
+     back space so it never overflows a short card (compact/focus, portrait). */
+  .fxsvg{width:100%;flex:0 1 17vh;min-height:0;display:block;margin-top:.4vh}
+  .fxsvg.wind{flex:0 0 auto;height:5.4vh;margin-top:.8vh}
   .fx{width:100%;border-collapse:collapse;font-size:1.35vh;color:var(--dim)}
   .fx td{text-align:center;padding:.25vh .1vw}
   .fx td:first-child{text-align:left;color:var(--faint);font-size:1.1vh;
@@ -132,26 +135,28 @@
   .fx-legend em{color:var(--faint);font-style:normal}
   .ol{display:flex;gap:.2vw}
   .ol-day{flex:1;text-align:center;min-width:0;overflow:hidden}
-  .ol-day.medium{opacity:.72} .ol-day.low{opacity:.48}
+  .ol-day.medium{opacity:.82} .ol-day.low{opacity:.64}
   .ol-name{font-size:1.5vh;font-weight:600}
   .ol-word{font-size:1.2vh;color:var(--dim);margin:.2vh 0;white-space:nowrap;
            overflow:hidden;text-overflow:ellipsis}
   .ol-t{font-size:1.5vh;color:var(--dim)} .ol-t b{color:var(--text)}
   .ol-pop{font-size:1.2vh;color:var(--faint);margin-top:.2vh;min-height:1.4vh}
-  .ol-acc-cap{font-size:1.1vh;color:var(--faint);margin-top:.6vh;
-              text-transform:uppercase;letter-spacing:.1em}
   /* segmented accuracy bar — each segment spans its confidence tier's days and
-     its fill height encodes the tier's accuracy (90/70/50), so certainty is
-     visibly stepping down across the week */
-  .ol-acc{display:flex;height:3vh;margin-top:.3vh;border:1px solid var(--edge);
+     its fill height encodes the tier's accuracy (95/90/80), so certainty is
+     visibly stepping down across the week. Title lives faded inside the first
+     (highest-confidence) segment. */
+  .ol-acc{display:flex;height:3.2vh;margin-top:.8vh;border:1px solid var(--edge);
           border-radius:6px;overflow:hidden;background:#10161f}
   .ol-acc-seg{position:relative;display:flex;align-items:flex-end;
               justify-content:center;border-left:1px solid var(--edge)}
   .ol-acc-seg:first-child{border-left:none}
   .ol-acc-bar{position:absolute;left:0;right:0;bottom:0;
               background:rgba(91,157,217,.42)}
-  .ol-acc-seg.medium .ol-acc-bar{background:rgba(91,157,217,.30)}
-  .ol-acc-seg.low .ol-acc-bar{background:rgba(91,157,217,.20)}
+  .ol-acc-seg.medium .ol-acc-bar{background:rgba(91,157,217,.32)}
+  .ol-acc-seg.low .ol-acc-bar{background:rgba(91,157,217,.24)}
+  .ol-acc-title{position:absolute;left:.7vw;top:.4vh;font-size:1.1vh;
+                color:var(--faint);opacity:.7;text-transform:uppercase;
+                letter-spacing:.1em;font-weight:600;pointer-events:none}
   .ol-acc-pct{position:relative;font-size:1.5vh;font-weight:600;
               color:var(--text);padding-bottom:.3vh}
 

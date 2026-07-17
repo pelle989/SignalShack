@@ -72,12 +72,13 @@ def test_outlook_seven_days_confidence_fade():
     days = out["days"]
     assert len(days) == 7
     assert days[0]["label"] == (DAY + timedelta(days=1)).strftime("%a")
-    assert [d["conf"] for d in days] == ["high"] * 4 + ["medium", "low", "low"]
+    assert [d["conf"] for d in days] == (
+        ["high"] * 3 + ["medium"] * 2 + ["low"] * 2)   # NWS curve: 1-3/4-5/6-7
     assert days[0]["word"] == "Rain"                     # WMO 61
     assert days[0]["pop"] == 30                          # tomorrow = index 8
     # accuracy band: consecutive same-confidence days grouped, tier -> %
     band = out["accuracy"]
-    assert [(b["pct"], b["span"]) for b in band] == [(90, 4), (70, 1), (50, 2)]
+    assert [(b["pct"], b["span"]) for b in band] == [(95, 3), (90, 2), (80, 2)]
     assert sum(b["span"] for b in band) == 7             # covers every column
 
 
@@ -103,7 +104,8 @@ def test_board_integration_and_layout(tmp_path, monkeypatch):
     assert "ol-ic" in html                               # outlook icons
     # accuracy graphic replaced the old prose caveat
     assert "fade for a reason" not in html
-    assert 'class="ol-acc"' in html and "90%" in html and "50%" in html
+    assert 'class="ol-acc"' in html and "95%" in html and "80%" in html
+    assert 'class="ol-acc-title">Forecast accuracy' in html   # title in 95% seg
 
 
 def test_rain_when_am_pm_split():
@@ -199,16 +201,21 @@ def test_forecast_horizon_setting(tmp_path, monkeypatch):
 def test_forecast_grid_horizons():
     hourly = _long_hourly(DAY)
     g12 = _forecast_grid(hourly, DAY.isoformat(), 7, 12)
+    g24 = _forecast_grid(hourly, DAY.isoformat(), 7, 24)
     g48 = _forecast_grid(hourly, DAY.isoformat(), 7, 48)
     g72 = _forecast_grid(hourly, DAY.isoformat(), 7, 72)
     assert len(g12["hours"]) == 12 and g12["horizon"] == 12
+    assert len(g24["hours"]) == 24 and g24["horizon"] == 24
     assert len(g48["hours"]) == 48 and g48["horizon"] == 48
     assert len(g72["hours"]) == 72 and g72["horizon"] == 72
-    # 12h & 48h fit their window (no pan); 72h overflows and pans ~one day
+    # 12/24/48h fit their window (no pan); 72h overflows and pans ~one day
     assert g12["chart"]["scroll"] == 0
+    assert g24["chart"]["scroll"] == 0
     assert g48["chart"]["scroll"] == 0
     assert g72["chart"]["scroll"] > 0
-    assert g72["chart"]["content_w"] > 480                    # wider than window
+    vw = g12["chart"]["vw"]                                   # widened viewBox
+    assert vw >= 480 and g12["chart"]["content_w"] <= vw + 1  # 12h fits window
+    assert g72["chart"]["content_w"] > vw                     # 72h overflows it
 
 
 def test_forecast_chart_dense_vs_detail():
