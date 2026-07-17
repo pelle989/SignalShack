@@ -71,6 +71,15 @@
     <label style="display:inline-flex;gap:6px;margin-right:14px"><input type="checkbox" name="ptype" value="TREE" {% if 'TREE' in ptypes %}checked{% endif %}> Tree</label>
     <label style="display:inline-flex;gap:6px;margin-right:14px"><input type="checkbox" name="ptype" value="GRASS" {% if 'GRASS' in ptypes %}checked{% endif %}> Grass</label>
     <label style="display:inline-flex;gap:6px;margin-right:14px"><input type="checkbox" name="ptype" value="WEED" {% if 'WEED' in ptypes %}checked{% endif %}> Weed (ragweed)</label>
+    {% if pollen_species %}
+    <label style="margin-top:8px">Specific plants at your location</label>
+    {% for s in pollen_species %}
+    <label style="display:inline-flex;gap:6px;margin-right:14px"><input type="checkbox" name="ptype" value="{{ s.code }}" {% if s.code in ptypes %}checked{% endif %}> {{ s.display }}</label>
+    {% endfor %}
+    {% else %}
+    <p class="dim" style="margin-top:4px">Specific plants (ragweed, oak, birch…)
+    appear here after the first reading arrives — check any type above to start.</p>
+    {% endif %}
     <button type="submit">Save pollen types</button>
   </form>
   <p class="dim" style="margin-top:4px">The Pollen card appears once at least

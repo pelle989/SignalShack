@@ -420,7 +420,8 @@ async def settings_page(request: Request):
                        settings=config_mgr.get_settings(conn),
                        airnow_configured=secrets.exists(conn, "airnow"),
                        pollen_configured=secrets.exists(conn, "google_pollen"),
-                       pollen_types=_pollen_types(conn))
+                       pollen_types=_pollen_types(conn),
+                       pollen_species=_pollen_species(conn))
     finally:
         conn.close()
 
@@ -428,6 +429,22 @@ async def settings_page(request: Request):
 def _pollen_types(conn) -> set[str]:
     return {r["field"] for r in conn.execute(
         "SELECT field FROM monitor WHERE adapter='pollen'").fetchall()}
+
+
+def _pollen_species(conn) -> list[dict]:
+    """Species Google reports at THIS location (from the latest snapshot) —
+    the picker only offers plants that actually grow near the household."""
+    from app.adapters.google_pollen import GooglePollenAdapter
+    from app.core import snapshots
+    loc = conn.execute("SELECT id FROM location WHERE is_primary=1").fetchone()
+    if not loc:
+        return []
+    snap = snapshots.latest(conn, loc["id"], "google_pollen")
+    if not snap:
+        return []
+    plants = GooglePollenAdapter().normalize(snap["payload"])["plants"]
+    return sorted(({"code": c, "display": p["display"]}
+                   for c, p in plants.items()), key=lambda s: s["display"])
 
 
 @router.post("/settings/pollen")
@@ -460,7 +477,8 @@ async def pollen_types(request: Request, csrf: str = Form(None)):
             return guard
         if security.check_csrf(guard, csrf):
             form = await request.form()
-            wanted = set(form.getlist("ptype")) & set(TYPES)
+            allowed = set(TYPES) | {s["code"] for s in _pollen_species(conn)}
+            wanted = set(form.getlist("ptype")) & allowed
             with conn:
                 conn.execute("DELETE FROM monitor WHERE adapter='pollen'")
                 for t in sorted(wanted):
@@ -566,7 +584,24 @@ async def layout_page(request: Request):
         cards = [{"type": c["type"], "enabled": c["enabled"],
                   "label": CARD_LABELS[c["type"]]}
                  for c in layout.get_layout(conn)]
-        return _render(request, "layout.html", guard, cards=cards)
+        return _render(request, "layout.html", guard, cards=cards,
+                       density=layout.get_density(conn),
+                       densities=layout.DENSITIES)
+    finally:
+        conn.close()
+
+
+@router.post("/layout/density")
+async def layout_density(request: Request, density: str = Form(""),
+                         csrf: str = Form(None)):
+    conn = db.connect()
+    try:
+        guard = _guard(request, conn)
+        if isinstance(guard, RedirectResponse):
+            return guard
+        if security.check_csrf(guard, csrf):
+            layout.set_density(conn, density)
+        return RedirectResponse("/admin/layout", status_code=303)
     finally:
         conn.close()
 

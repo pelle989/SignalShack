@@ -1,6 +1,8 @@
 <div class="pip" id="pip" hx-swap-oob="true">
   <span class="dot {{ pip.state }}"></span><span>{{ pip.label }}</span>
 </div>
+{# density rides every fragment so admin changes apply without a TV reload #}
+<script>document.getElementById("board").className = "{{ density or 'comfortable' }}";</script>
 
 {# cards render in the household's chosen order; first card = primary slot #}
 {% for card in layout %}

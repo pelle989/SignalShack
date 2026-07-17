@@ -71,8 +71,11 @@ class GooglePollenAdapter(Adapter):
             return r.json()
 
     def normalize(self, raw: dict) -> dict:
-        """-> {"types": {"TREE": {"index", "category", "meaning"}, ...}}.
-        Types the API omits (out of season) come back index 0."""
+        """-> {"types": {...}, "plants": {...}} — same shape per entry:
+        {"index", "category", "meaning"} (+ "display", "in_season" on plants).
+        Types the API omits (out of season) come back index 0. plants carries
+        the species Google reports for THIS location (ragweed, oak, birch...)
+        — free detail inside the response we already fetch."""
         out = {t: {"index": 0, "category": "None",
                    "meaning": MEANINGS[0]} for t in TYPES}
         days = raw.get("dailyInfo") or []
@@ -87,4 +90,18 @@ class GooglePollenAdapter(Adapter):
                          "category": (info.get("indexInfo") or {}).get(
                              "category", ""),
                          "meaning": MEANINGS.get(idx, "")}
-        return {"types": out}
+        plants = {}
+        for info in (days[0].get("plantInfo", []) if days else []):
+            code = info.get("code")
+            if not code:
+                continue
+            idx = (info.get("indexInfo") or {}).get("value") or 0
+            plants[code] = {
+                "display": info.get("displayName") or code.title(),
+                "index": idx,
+                "category": (info.get("indexInfo") or {}).get("category")
+                or ("None" if idx == 0 else ""),
+                "meaning": MEANINGS.get(idx, ""),
+                "in_season": bool(info.get("inSeason")),
+            }
+        return {"types": out, "plants": plants}

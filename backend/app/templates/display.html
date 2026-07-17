@@ -109,6 +109,15 @@
   .ann::before{content:"○ ";color:var(--faint)}
   .ann.pri::before{content:"● "}
   .disclaimer{font-size:1.4vh;color:var(--faint)}
+
+  /* density presets (admin → Layout → Board density) */
+  #board.compact{grid-template-columns:repeat(3,1fr)}
+  #board.compact .primary{grid-row:auto}
+  #board.compact .card{padding:1.8vh 1.2vw}
+  #board.compact .msg{font-size:3vh}
+  #board.compact .sec{font-size:2.1vh}
+  #board.focus{grid-template-columns:3fr 2fr}
+  #board.focus .msg{font-size:5.4vh}
 </style>
 </head>
 <body>

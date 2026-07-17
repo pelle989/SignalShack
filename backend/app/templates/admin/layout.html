@@ -28,4 +28,17 @@
   <p class="dim" style="margin-top:10px">Transit and Air Quality appear on the
   board only when configured (watched lines / AirNow key).</p>
 </div>
+<h2>Board density</h2>
+<div class="card">
+  <form method="post" action="/admin/layout/density">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <label style="display:block;margin-bottom:6px"><input type="radio" name="density" value="comfortable" {% if density == 'comfortable' %}checked{% endif %}>
+      <b>Comfortable</b> <span class="dim">— big primary card, roomy. The default.</span></label>
+    <label style="display:block;margin-bottom:6px"><input type="radio" name="density" value="compact" {% if density == 'compact' %}checked{% endif %}>
+      <b>Compact</b> <span class="dim">— equal-size cards, more on screen at once.</span></label>
+    <label style="display:block;margin-bottom:6px"><input type="radio" name="density" value="focus" {% if density == 'focus' %}checked{% endif %}>
+      <b>Focus</b> <span class="dim">— primary plus two cards, nothing else. Pure glance.</span></label>
+    <button type="submit">Save density</button>
+  </form>
+</div>
 {% endblock %}

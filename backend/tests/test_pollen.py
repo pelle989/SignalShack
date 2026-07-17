@@ -17,6 +17,11 @@ SAMPLE = {"dailyInfo": [{
         {"code": "TREE", "displayName": "Tree",
          "indexInfo": {"value": 1, "category": "Very Low"}},
         {"code": "WEED", "displayName": "Weed"},          # no index today
+    ],
+    "plantInfo": [
+        {"code": "RAGWEED", "displayName": "Ragweed", "inSeason": True,
+         "indexInfo": {"value": 5, "category": "Very High"}},
+        {"code": "OAK", "displayName": "Oak", "inSeason": False},   # no index
     ]}]}
 
 
@@ -35,6 +40,27 @@ def test_normalize_defaults_and_categories():
     assert out["TREE"]["index"] == 1
     assert out["WEED"]["index"] == 0          # missing indexInfo -> 0, no crash
     assert GooglePollenAdapter().normalize({})["types"]["TREE"]["index"] == 0
+
+
+def test_normalize_reports_location_species():
+    plants = GooglePollenAdapter().normalize(SAMPLE)["plants"]
+    assert plants["RAGWEED"]["index"] == 5 and plants["RAGWEED"]["in_season"]
+    assert "windows" in plants["RAGWEED"]["meaning"]
+    assert plants["OAK"]["index"] == 0                # no index -> 0, no crash
+
+
+def test_board_species_rows_and_missing_species(tmp_path, monkeypatch):
+    conn = setup_conn(tmp_path, monkeypatch)
+    now = datetime(2026, 7, 16, 7, 0)
+    store_weather(conn, date(2026, 7, 16), fetched_at=now)
+    _enable(conn, types=("GRASS", "RAGWEED", "BIRCH"))  # birch not in feed
+    snapshots.save(conn, 1, "google_pollen", SAMPLE, now=now)
+    ctx = compose_board(conn, now=now)
+    rows = {r["type"]: r for r in ctx["pollen"]["rows"]}
+    assert rows["RAGWEED"]["label"] == "Ragweed"
+    assert rows["RAGWEED"]["index"] == 5
+    assert rows["RAGWEED"]["attention"] == "amber"
+    assert rows["BIRCH"]["category"] == "No reading"    # honest, not vanished
 
 
 def test_board_pollen_card_rows_and_attention(tmp_path, monkeypatch):
@@ -98,6 +124,25 @@ def test_admin_key_and_type_toggles(tmp_path, monkeypatch):
             "SELECT field FROM monitor WHERE adapter='pollen'").fetchall()}
         assert rows == {"GRASS"}
         conn.close()
+
+
+def test_admin_species_toggle_validated_against_snapshot(tmp_path, monkeypatch):
+    with client(tmp_path, monkeypatch) as c:
+        do_setup(c)
+        csrf = get_csrf(c)
+        c.post("/admin/settings/pollen",
+               data={"api_key": "k" * 30, "csrf": csrf})
+        conn = db.connect()
+        snapshots.save(conn, 1, "google_pollen", SAMPLE)
+        conn.close()
+        # RAGWEED is reported at this location; MADEUP is not
+        c.post("/admin/settings/pollen/types",
+               data={"ptype": ["TREE", "RAGWEED", "MADEUP"], "csrf": csrf})
+        conn = db.connect()
+        rows = {r["field"] for r in conn.execute(
+            "SELECT field FROM monitor WHERE adapter='pollen'").fetchall()}
+        conn.close()
+        assert rows == {"TREE", "RAGWEED"}
 
 
 def test_scheduler_polls_only_with_key_and_types(tmp_path, monkeypatch):

@@ -300,8 +300,16 @@ def compose_board(conn: sqlite3.Connection, now: datetime | None = None) -> dict
         if p_snap:
             norm = GooglePollenAdapter().normalize(p_snap["payload"])
             for t in ptypes:
-                info = norm["types"][t]
-                rows.append({"type": t, "label": TYPE_LABELS[t], **info,
+                # a watched field is a type bucket OR a species code
+                info = norm["types"].get(t) or norm["plants"].get(t)
+                if info is None:             # species not reported today
+                    info = {"index": 0, "category": "No reading",
+                            "meaning": "not reported at your location today"}
+                label = TYPE_LABELS.get(t) or info.get("display") or t.title()
+                rows.append({"type": t, "label": label,
+                             "index": info["index"],
+                             "category": info["category"],
+                             "meaning": info["meaning"],
                              "attention": "amber" if info["index"] >= 4 else None})
         pollen = {"state": p_state, "rows": rows,
                   "attention": ("amber" if any(r["index"] >= 4 for r in rows)
@@ -320,6 +328,7 @@ def compose_board(conn: sqlite3.Connection, now: datetime | None = None) -> dict
     ctx["announcements"] = [{"text": r["text"], "priority": r["priority"]} for r in rows]
 
     ctx["layout"] = layout.visible_order(conn, ctx)
+    ctx["density"] = layout.get_density(conn)
     ctx["pip"] = _pip(ctx)
     return ctx
 
