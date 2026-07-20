@@ -20,6 +20,11 @@
   button{background:var(--green);color:#08120b;border:0;border-radius:7px;padding:9px 18px;
     font-size:14px;font-weight:600;margin-top:12px;cursor:pointer}
   button.quiet{background:var(--card);color:var(--dim);border:1px solid var(--edge)}
+  a.quiet{background:var(--card);color:var(--dim);border:1px solid var(--edge);
+    border-radius:7px;padding:9px 18px;font-size:14px;font-weight:600;
+    text-decoration:none;display:inline-block;cursor:pointer}
+  .icon-btn{padding:9px 12px;line-height:0}
+  .icon-btn svg{width:15px;height:15px;vertical-align:middle}
   .error{color:var(--red);font-size:13px;margin:8px 0}
   .ok{color:var(--green)} .warn{color:var(--amber)} .dim{color:var(--dim);font-size:13px}
   .row{display:flex;justify-content:space-between;align-items:center;padding:8px 0;
@@ -27,6 +32,7 @@
   .row:last-child{border-bottom:0}
   .badge{font-size:11px;background:var(--amber);color:#000;border-radius:8px;padding:1px 7px;margin-left:6px}
   form.inline{display:inline}
+  form.inline button{margin-top:0}
 </style>
 </head>
 <body>

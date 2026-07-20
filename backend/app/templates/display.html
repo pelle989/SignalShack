@@ -161,11 +161,18 @@
               color:var(--text);padding-bottom:.3vh}
 
   /* density presets (admin → Layout → Board density) */
-  #board.compact{grid-template-columns:repeat(3,1fr)}
+  /* compact: CSS columns — cards shrink to content and pack, no dead space */
+  @media (min-aspect-ratio: 1/1){
+    #board.compact{display:block;columns:3;column-gap:1.4vh}
+    #board.compact .card{margin-bottom:1.4vh;break-inside:avoid;
+                         -webkit-column-break-inside:avoid}
+    #board.compact .tomorrow-strip{column-span:all;margin-bottom:1.4vh}
+  }
   #board.compact .primary{grid-row:auto}
   #board.compact .card{padding:1.8vh 1.2vw}
   #board.compact .msg{font-size:3vh}
   #board.compact .sec{font-size:2.1vh}
+  #board.compact .stamp{padding-top:.8vh}
   #board.focus{grid-template-columns:3fr 2fr}
   #board.focus .msg{font-size:5.4vh}
 </style>

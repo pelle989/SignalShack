@@ -549,7 +549,7 @@ def _forecast_chart(hours: list[dict], hpw: int | None = None) -> dict | None:
             gusty = g is not None and (g - h["wind"] >= 8 or g >= 20)
             chart["winds"].append({
                 "x": xs[i] - 12, "hot": g is not None and g >= 30,
-                "text": f"{h['wind']:.0f}" + (f" g {g:.0f}" if gusty else "")})
+                "text": f"{h['wind']:.0f}" + (f"g{g:.0f}" if gusty else "")})
             if h["dir"]:
                 chart["dirs"].append(
                     {"x": xs[i] - 12,

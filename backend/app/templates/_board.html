@@ -174,12 +174,13 @@
     <span><i style="background:#e8edf4"></i>temp</span>
     <span><i style="background:#4caf50"></i>rain %</span>
     <span><i style="background:#8b98a9;opacity:.6"></i>clouds</span>
-    <span><i style="background:#d8d867"></i>wind{% if c.winds %} <em>(4 g 13 = 4 mph, gusts 13)</em>{% endif %}</span>
+    <span><i style="background:#d8d867"></i>wind{% if c.winds %} <em>(4g13 = 4mph, gusts 13)</em>{% endif %}</span>
   </div>
   {% if c.winds %}
-  <svg class="fxsvg wind" viewBox="0 0 {{ c.vw }} 30" preserveAspectRatio="none" aria-label="wind speed, gusts, direction">
-    <g font-size="10.5" fill="#8b98a9"><text x="4" y="12" fill="#5c6878">wind</text>{% for w in c.winds %}<text x="{{ w.x }}" y="12"{% if w.hot %} fill="#e0a63d" font-weight="600"{% endif %}>{{ w.text }}</text>{% endfor %}</g>
-    <g font-size="10.5" fill="#5c6878"><text x="4" y="26">dir</text>{% for dd in c.dirs %}<text x="{{ dd.x }}" y="26">{{ dd.text }}</text>{% endfor %}</g>
+  {# viewBox height ~matches the pixel aspect so glyphs stay full-width #}
+  <svg class="fxsvg wind" viewBox="0 0 {{ c.vw }} 38" preserveAspectRatio="none" aria-label="wind speed, gusts, direction">
+    <g font-size="13" fill="#8b98a9"><text x="4" y="15" fill="#5c6878" font-size="10">wind</text>{% for w in c.winds %}<text x="{{ w.x }}" y="15"{% if w.hot %} fill="#e0a63d" font-weight="600"{% endif %}>{{ w.text }}</text>{% endfor %}</g>
+    <g font-size="13" fill="#5c6878"><text x="4" y="33" font-size="10">dir</text>{% for dd in c.dirs %}<text x="{{ dd.x }}" y="33">{{ dd.text }}</text>{% endfor %}</g>
   </svg>
   {% endif %}
   {% endif %}
