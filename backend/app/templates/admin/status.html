@@ -25,5 +25,15 @@
   {% for e in events %}<div class="row dim"><span>{{ e.ts }}</span><span>{{ e.service }} · {{ e.event_type }}</span></div>
   {% else %}<div class="dim">No events.</div>{% endfor %}
 </div>
+<h2>Maintenance</h2>
+<div class="card">
+  <p class="dim">Restarts the SignalShack app (not the box). The display shows
+  cached data again within ~15 seconds. Use when something looks stuck.</p>
+  <form method="post" action="/admin/restart"
+        onsubmit="return confirm('Restart SignalShack now?')">
+    <input type="hidden" name="csrf" value="{{ csrf }}">
+    <button class="quiet" type="submit">Restart SignalShack</button>
+  </form>
+</div>
 <form method="post" action="/admin/logout"><button class="quiet">Log out</button></form>
 {% endblock %}

@@ -1,6 +1,9 @@
 """Admin — plain, boring, form-based (by design). All mutating routes: CSRF."""
 
+import asyncio
 import json
+import os
+import signal
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -563,6 +566,40 @@ async def privacy_page(request: Request):
         return _render(request, "privacy.html", guard)
     finally:
         conn.close()
+
+
+# ---------------------------------------------------------------- restart
+
+def _schedule_exit(delay: float = 0.5) -> None:
+    """Deliver the response first, then exit gracefully — Docker's
+    unless-stopped policy brings the app back in seconds. App-only:
+    host power stays out of reach by design (LAN is untrusted)."""
+    loop = asyncio.get_running_loop()
+    loop.call_later(delay, os.kill, os.getpid(), signal.SIGTERM)
+
+
+@router.post("/restart", response_class=HTMLResponse)
+async def app_restart(request: Request, csrf: str = Form(None)):
+    conn = db.connect()
+    try:
+        guard = _guard(request, conn)
+        if isinstance(guard, RedirectResponse):
+            return guard
+        if not security.check_csrf(guard, csrf):
+            return RedirectResponse("/admin", status_code=303)
+        conn.execute(
+            "INSERT INTO event_log (ts, level, service, event_type, payload_json)"
+            " VALUES (?, 'info', 'app', 'restart_requested', '{}')",
+            (datetime.now().isoformat(timespec="seconds"),))
+        conn.commit()
+    finally:
+        conn.close()
+    _schedule_exit()
+    return HTMLResponse(
+        "<meta http-equiv='refresh' content='12;url=/admin'>"
+        "<body style='background:#0d1117;color:#e8edf4;"
+        "font-family:sans-serif;padding:40px'><h2>Restarting…</h2>"
+        "<p>Back in about 15 seconds — this page reloads itself.</p></body>")
 
 
 # ---------------------------------------------------------------- layout
