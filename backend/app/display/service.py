@@ -627,27 +627,7 @@ def _outlook(daily: dict, today_iso: str, hourly: dict | None = None) -> dict | 
         })
     if len(days) < 2:                   # 1 day = tomorrow strip's job
         return None
-    return {"days": days, "accuracy": _accuracy_band(days)}
-
-
-# how confident the outlook is, per tier — replaces the old prose caveat with
-# an honest number. Figures follow the NWS accuracy curve: 1-3d ~95%, 4-5d
-# ~90%, 6-7d ~80% (a 10-day forecast is ~50%, but this card stops at day 7).
-_CONF_PCT = {"high": 95, "medium": 90, "low": 80}
-
-
-def _accuracy_band(days: list[dict]) -> list[dict]:
-    """Group consecutive days of equal confidence into labelled segments so the
-    board can draw one accuracy bar aligned under the day columns. span = how
-    many day-columns the segment covers; pct = that tier's accuracy."""
-    band = []
-    for d in days:
-        pct = _CONF_PCT[d["conf"]]
-        if band and band[-1]["conf"] == d["conf"]:
-            band[-1]["span"] += 1
-        else:
-            band.append({"conf": d["conf"], "pct": pct, "span": 1})
-    return band
+    return {"days": days}
 
 
 def get_live_fields(conn: sqlite3.Connection,

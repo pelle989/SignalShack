@@ -201,17 +201,6 @@
     </div>
     {% endfor %}
   </div>
-  {% if outlook.accuracy %}
-  <div class="ol-acc" role="img" aria-label="Forecast accuracy fades from {{ outlook.accuracy[0].pct }}% to {{ outlook.accuracy[-1].pct }}% over the week">
-    {% for a in outlook.accuracy %}
-    <div class="ol-acc-seg {{ a.conf }}" style="flex-grow:{{ a.span }}">
-      <div class="ol-acc-bar" style="height:{{ a.pct }}%"></div>
-      {% if loop.first %}<span class="ol-acc-title">Forecast accuracy</span>{% endif %}
-      <span class="ol-acc-pct">{{ a.pct }}%</span>
-    </div>
-    {% endfor %}
-  </div>
-  {% endif %}
   <div class="stamp">Open-Meteo · {{ stamp_weather }}</div>
 </div>
 

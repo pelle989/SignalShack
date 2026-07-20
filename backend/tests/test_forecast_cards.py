@@ -76,10 +76,6 @@ def test_outlook_seven_days_confidence_fade():
         ["high"] * 3 + ["medium"] * 2 + ["low"] * 2)   # NWS curve: 1-3/4-5/6-7
     assert days[0]["word"] == "Rain"                     # WMO 61
     assert days[0]["pop"] == 30                          # tomorrow = index 8
-    # accuracy band: consecutive same-confidence days grouped, tier -> %
-    band = out["accuracy"]
-    assert [(b["pct"], b["span"]) for b in band] == [(95, 3), (90, 2), (80, 2)]
-    assert sum(b["span"] for b in band) == 7             # covers every column
 
 
 def test_outlook_none_on_short_daily():
@@ -102,10 +98,7 @@ def test_board_integration_and_layout(tmp_path, monkeypatch):
     assert 'class="series-temp"' in html and 'class="series-cloud"' in html
     assert 'class="ct-grids"' in html                    # Chartist framework
     assert "ol-ic" in html                               # outlook icons
-    # accuracy graphic replaced the old prose caveat
-    assert "fade for a reason" not in html
-    assert 'class="ol-acc"' in html and "95%" in html and "80%" in html
-    assert 'class="ol-acc-title">Forecast accuracy' in html   # title in 95% seg
+    assert "ol-acc" not in html                          # accuracy bar removed
 
 
 def test_rain_when_am_pm_split():
