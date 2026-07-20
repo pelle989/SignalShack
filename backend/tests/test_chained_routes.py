@@ -233,6 +233,44 @@ def test_build_dataset_captures_time_offsets(tmp_path, monkeypatch):
     assert gtfs.travel_seconds("R", "R36", "R31") == 360
 
 
+def test_route_edit_via_admin(tmp_path, monkeypatch):
+    use_r_dataset(tmp_path, monkeypatch)
+    with client(tmp_path, monkeypatch) as c:
+        do_setup(c)
+        csrf = get_csrf(c)
+        c.post("/admin/transit/route", data={
+            "csrf": csrf, "route_name": "Work commute",
+            "leg_line": ["R", "F"], "leg_from": ["R36", "F18"],
+            "leg_to": ["R31", "F24"]})
+        conn = db.connect()
+        rid = conn.execute("SELECT id FROM commute_profile").fetchone()["id"]
+        conn.close()
+        # edit form pre-fills name and selections
+        page = c.get(f"/admin/transit?edit={rid}")
+        assert "Save changes" in page.text
+        assert 'value="Work commute"' in page.text
+        assert 'value="R36" selected' in page.text
+        # update: reversed direction + new name
+        c.post(f"/admin/transit/route/{rid}", data={
+            "csrf": csrf, "route_name": "Home commute",
+            "leg_line": ["F", "R"], "leg_from": ["F24", "R31"],
+            "leg_to": ["F18", "R36"]})
+        conn = db.connect()
+        row = conn.execute("SELECT name, legs_json FROM commute_profile"
+                           " WHERE id=?", (rid,)).fetchone()
+        legs = json.loads(row["legs_json"])
+        assert row["name"] == "Home commute"
+        assert legs[0]["line"] == "F" and legs[0]["from_name"] == "7 Av"
+        # invalid edit (single leg) leaves the route untouched
+        c.post(f"/admin/transit/route/{rid}", data={
+            "csrf": csrf, "route_name": "Broken",
+            "leg_line": "R", "leg_from": "R36", "leg_to": "R31"})
+        row = conn.execute("SELECT name FROM commute_profile WHERE id=?",
+                           (rid,)).fetchone()
+        assert row["name"] == "Home commute"
+        conn.close()
+
+
 def test_scheduler_wakes_for_routes_alone(tmp_path, monkeypatch):
     conn = setup_conn(tmp_path, monkeypatch)
     assert "mta" not in [a.manifest.name for a in _active_adapters(conn)]

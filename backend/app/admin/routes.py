@@ -670,7 +670,7 @@ RAIL_LINES = ["LIRR", "MNR"]
 
 
 @router.get("/transit", response_class=HTMLResponse)
-async def transit_page(request: Request, msg: str = ""):
+async def transit_page(request: Request, msg: str = "", edit: int = 0):
     from app.transit import gtfs
     conn = db.connect()
     try:
@@ -693,8 +693,20 @@ async def transit_page(request: Request, msg: str = ""):
             " ORDER BY id").fetchall()
         routes = [{"id": r["id"], "name": r["name"],
                    "legs": json.loads(r["legs_json"] or "[]")} for r in routes_rows]
+        # ?edit=<id>: builder pre-filled with that route's legs
+        edit_route = None
+        if edit and dataset:
+            row = conn.execute(
+                "SELECT id, name, legs_json FROM commute_profile"
+                " WHERE id=? AND mode='train'", (edit,)).fetchone()
+            if row:
+                legs = json.loads(row["legs_json"] or "[]")
+                for leg in legs:
+                    leg["stops"] = gtfs.stops_for(leg["line"])
+                edit_route = {"id": row["id"], "name": row["name"], "legs": legs}
         return _render(request, "transit.html", guard, monitors=monitors,
                        subway=SUBWAY_LINES, rail=RAIL_LINES, routes=routes,
+                       edit_route=edit_route,
                        has_dataset=dataset is not None, msg=msg)
     finally:
         conn.close()
@@ -736,10 +748,25 @@ async def transit_leg_stops(request: Request, leg_line: str = ""):
     return _render(request, "_leg_stops.html", None, stops=stops)
 
 
+def _route_form(form) -> tuple[str, list[dict]]:
+    """Shared by create + edit: name and validated ordered legs."""
+    from app.transit import gtfs
+    name = (form.get("route_name") or "").strip()[:40] or "My route"
+    legs = []
+    for line, frm, to in zip(form.getlist("leg_line"), form.getlist("leg_from"),
+                             form.getlist("leg_to"), strict=False):
+        if not (line in SUBWAY_LINES and frm and to and frm != to):
+            continue                                      # skip incomplete rows
+        names = {s["id"]: s["name"] for s in gtfs.stops_for(line)}
+        if frm in names and to in names:
+            legs.append({"line": line, "from_id": frm, "to_id": to,
+                         "from_name": names[frm], "to_name": names[to]})
+    return name, legs
+
+
 @router.post("/transit/route")
 async def transit_route_save(request: Request):
     """Chained route: ordered legs, each line + from + to."""
-    from app.transit import gtfs
     conn = db.connect()
     try:
         guard = _guard(request, conn)
@@ -748,22 +775,36 @@ async def transit_route_save(request: Request):
         form = await request.form()
         if not security.check_csrf(guard, form.get("csrf")):
             return RedirectResponse("/admin/transit", status_code=303)
-        name = (form.get("route_name") or "").strip()[:40] or "My route"
-        legs = []
-        for line, frm, to in zip(form.getlist("leg_line"), form.getlist("leg_from"),
-                                 form.getlist("leg_to"), strict=False):
-            if not (line in SUBWAY_LINES and frm and to and frm != to):
-                continue                                  # skip incomplete rows
-            names = {s["id"]: s["name"] for s in gtfs.stops_for(line)}
-            if frm in names and to in names:
-                legs.append({"line": line, "from_id": frm, "to_id": to,
-                             "from_name": names[frm], "to_name": names[to]})
+        name, legs = _route_form(form)
         if len(legs) >= 2:                                # a chain needs 2+ legs
             with conn:
                 conn.execute(
                     "INSERT INTO commute_profile (name, mode, legs_json,"
                     " actively_monitored) VALUES (?, 'train', ?, 1)",
                     (name, json.dumps(legs)))
+        return RedirectResponse("/admin/transit", status_code=303)
+    finally:
+        conn.close()
+
+
+@router.post("/transit/route/{route_id:int}")
+async def transit_route_update(request: Request, route_id: int):
+    """Edit a chained route in place — same rules as create (2+ legs)."""
+    conn = db.connect()
+    try:
+        guard = _guard(request, conn)
+        if isinstance(guard, RedirectResponse):
+            return guard
+        form = await request.form()
+        if not security.check_csrf(guard, form.get("csrf")):
+            return RedirectResponse("/admin/transit", status_code=303)
+        name, legs = _route_form(form)
+        if len(legs) >= 2:
+            with conn:
+                conn.execute(
+                    "UPDATE commute_profile SET name=?, legs_json=?"
+                    " WHERE id=? AND mode='train'",
+                    (name, json.dumps(legs), route_id))
         return RedirectResponse("/admin/transit", status_code=303)
     finally:
         conn.close()
